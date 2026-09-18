@@ -1,0 +1,13 @@
+# Only needed to build the installer / lint the code, not to run the app.
+-r requirements.txt
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7
+pyflakes==3.4.0
+
+# Custom PyQt6 installer wizard (build/build_installer.py, replacing Inno Setup
+# as of v0.13.0 - see CHANGELOG). PyQt6 is NOT a runtime dependency of the app
+# itself (app/ uses customtkinter) - it exists solely to build a genuinely
+# custom-styled setup wizard instead of native/Inno chrome, same pattern as
+# PC-Software/SnapAI/build/build_installer.py.
+PyQt6==6.9.1
+pywin32==311

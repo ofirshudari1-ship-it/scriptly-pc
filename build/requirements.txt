@@ -1,0 +1,34 @@
+# Direct dependencies, pinned to the versions actually verified working
+# (previously this file had no version pins at all — an unpinned `pip install`
+# could silently pull a newer/incompatible release of any of these).
+#
+# For byte-for-byte reproducibility of the exact environment this app was
+# built and tested against (including every transitive dependency, e.g. the
+# CUDA/cuDNN packages faster-whisper pulls in for GPU support), use
+# requirements-lock.txt instead:
+#   pip install -r requirements-lock.txt
+
+faster-whisper==1.2.1
+PyAudioWPatch==0.2.12.8
+pystray==0.19.5
+pillow==12.3.0
+keyboard==0.13.5
+requests==2.34.2
+PyYAML==6.0.3
+google-auth-oauthlib==1.4.1
+google-api-python-client==2.200.0
+customtkinter==6.0.0
+python-docx==1.2.0
+
+# GPU acceleration for faster-whisper transcription (tested on an RTX 4060).
+# faster-whisper/ctranslate2 don't declare these as pip dependencies, so a
+# plain `pip install -r requirements.txt` silently gets you CPU-only
+# transcription (the app already falls back to CPU automatically, just much
+# slower) unless these are installed too. Safe to drop this block entirely
+# on a machine with no NVIDIA GPU.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cudnn-cu12==9.25.1.1
+
+# Build tooling (only needed to package the .exe, not to run the app) is in
+# requirements-dev.txt.

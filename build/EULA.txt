@@ -1,0 +1,64 @@
+SCRIPTLY PC - END USER LICENSE AGREEMENT
+
+This software is provided free of charge for personal use.
+
+1. LICENSE. You are granted a non-exclusive, non-transferable license to
+   install and use Scriptly PC on your own computer(s) for personal or
+   internal business purposes.
+
+2. RESTRICTIONS. You may not: (a) sell, rent, lease, or sublicense this
+   software; (b) reverse engineer, decompile, or disassemble the compiled
+   application, except to the extent such restriction is prohibited by
+   applicable law; (c) remove or alter any copyright, trademark, or other
+   proprietary notices.
+
+3. YOUR DATA. Scriptly PC runs entirely on your own computer. Recordings,
+   transcripts, and summaries are stored locally and are never transmitted
+   anywhere, except when you explicitly connect an optional Google account
+   and explicitly send an individual task - a feature that is off by
+   default. You are solely responsible for the content you record and for
+   complying with any applicable recording-consent laws in your jurisdiction.
+
+4. NO WARRANTY. THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+5. LIMITATION OF LIABILITY. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. UNSIGNED SOFTWARE. This installer is not digitally signed. Windows
+   SmartScreen may show a warning before installation. This does not
+   indicate the software is malicious; it means the publisher has not yet
+   registered a code-signing certificate reputation with Microsoft.
+
+Copyright (c) 2026 Scriptly PC. All rights reserved.
+
+---
+
+Scriptly PC - הסכם רישיון למשתמש קצה
+
+תוכנה זו מסופקת ללא תשלום לשימוש אישי.
+
+1. רישיון. ניתן לך רישיון לא-בלעדי ולא-ניתן-להעברה להתקין ולהשתמש
+   ב-Scriptly PC במחשב שלך לצרכים אישיים או עסקיים פנימיים.
+
+2. הגבלות. אסור: (א) למכור, להשכיר או להעניק רישיון-משנה לתוכנה; (ב)
+   לבצע הנדסה חוזרת או פירוק לקוד המקומפל, אלא אם החוק המקומי אוסר הגבלה
+   זו; (ג) להסיר או לשנות הודעות זכויות יוצרים או סימני מסחר.
+
+3. הנתונים שלך. Scriptly PC רץ לגמרי במחשב שלך. הקלטות, תמלולים וסיכומים
+   נשמרים מקומית ואינם נשלחים לשום מקום, אלא אם תבחרו במפורש לחבר חשבון
+   Google אופציונלי ולשלוח משימה בודדת במפורש - תכונה שכבויה כברירת מחדל.
+   האחריות על תוכן ההקלטות ועל עמידה בחוקי הקלטה החלים עליכם היא שלכם בלבד.
+
+4. ללא אחריות. התוכנה מסופקת "כפי שהיא", ללא כל אחריות, מפורשת או משתמעת.
+
+5. הגבלת אחריות. בשום מקרה לא יישא המפתח באחריות לנזק כלשהו הנובע
+   משימוש בתוכנה או בקשר אליה.
+
+6. תוכנה לא-חתומה. קובץ ההתקנה אינו חתום דיגיטלית. Windows SmartScreen
+   עשוי להציג אזהרה לפני ההתקנה - זה לא אומר שהתוכנה זדונית, אלא שהמפרסם
+   טרם רשם מוניטין לתעודת חתימת קוד מול Microsoft.
+
+כל הזכויות שמורות (c) 2026 Scriptly PC.
