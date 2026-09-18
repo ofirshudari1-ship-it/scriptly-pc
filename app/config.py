@@ -72,6 +72,7 @@ DEFAULTS = {
     "window_geometry": "",  # "WxH+X+Y" Tk geometry string, persisted across sessions; empty = use default
     "tray_background_notice_shown": False,
     "hide_noise_recordings": False,  # see Meeting.likely_noise (app/meetings.py) - off by default so nothing is ever hidden without the user opting in
+    "check_for_updates_enabled": True,  # startup GitHub-releases check (app/update_checker.py) - opt-out, not opt-in, since it's a read-only unauthenticated request with no user data involved
 }
 
 

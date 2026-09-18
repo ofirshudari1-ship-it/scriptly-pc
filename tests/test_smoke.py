@@ -300,5 +300,51 @@ class TestExportFormats(unittest.TestCase):
             self.assertIn("## Summary", md_out.read_text(encoding="utf-8"))
 
 
+class TestUpdateChecker(unittest.TestCase):
+    """Version-comparison logic used by the GitHub-releases auto-update check
+    (app/update_checker.py). No network calls here - see check_for_update_sync
+    for the part that hits the GitHub API, deliberately left untested against
+    the live network in a unit test."""
+
+    def test_parse_version_strips_leading_v(self):
+        from app.update_checker import _parse_version
+
+        self.assertEqual(_parse_version("v0.13.1"), (0, 13, 1))
+        self.assertEqual(_parse_version("0.13.1"), (0, 13, 1))
+
+    def test_parse_version_pads_missing_parts(self):
+        from app.update_checker import _parse_version
+
+        self.assertEqual(_parse_version("v1"), (1, 0, 0))
+        self.assertEqual(_parse_version("v1.2"), (1, 2, 0))
+
+    def test_parse_version_drops_non_numeric_suffix(self):
+        from app.update_checker import _parse_version
+
+        self.assertEqual(_parse_version("v0.13.1-beta"), (0, 13, 1))
+
+    def test_is_newer_true_for_higher_patch(self):
+        from app.update_checker import is_newer
+
+        self.assertTrue(is_newer("v0.13.2", "0.13.1"))
+
+    def test_is_newer_false_for_same_version(self):
+        from app.update_checker import is_newer
+
+        self.assertFalse(is_newer("v0.13.1", "0.13.1"))
+
+    def test_is_newer_false_for_older_version(self):
+        from app.update_checker import is_newer
+
+        self.assertFalse(is_newer("v0.12.9", "0.13.1"))
+
+    def test_is_newer_compares_major_and_minor_not_just_patch(self):
+        from app.update_checker import is_newer
+
+        self.assertTrue(is_newer("v1.0.0", "0.99.99"))
+        self.assertTrue(is_newer("v0.14.0", "0.13.99"))
+        self.assertFalse(is_newer("v0.13.99", "0.14.0"))
+
+
 if __name__ == "__main__":
     unittest.main()

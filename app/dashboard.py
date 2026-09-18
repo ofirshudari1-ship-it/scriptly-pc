@@ -1489,6 +1489,43 @@ class Dashboard:
         )
         add_help(sec_storage, t("settings_auto_save_recordings_help"))
 
+        check_updates_var = tk.BooleanVar(value=config.get("check_for_updates_enabled", True))
+        ctk.CTkCheckBox(sec_storage, text=t("settings_check_for_updates"), variable=check_updates_var).pack(
+            anchor=anchor, padx=16, pady=(8, 0)
+        )
+        add_help(sec_storage, t("settings_check_for_updates_help"))
+
+        update_status_lbl = ctk.CTkLabel(
+            sec_storage, text="", text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=12), anchor=anchor,
+        )
+
+        def do_check_for_updates_now():
+            update_status_lbl.configure(text=t("update_check_checking"))
+
+            def worker():
+                from . import update_checker
+
+                result = update_checker.check_for_update_sync()
+                if result:
+                    def show_found():
+                        update_status_lbl.configure(text=t("update_check_found", version=result["version"]))
+
+                    self.root.after(0, show_found)
+                    self.root.after(0, lambda: update_checker.open_release_page(result["url"]))
+                else:
+                    self.root.after(0, lambda: update_status_lbl.configure(text=t("update_check_up_to_date")))
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        check_updates_row = ctk.CTkFrame(sec_storage, fg_color="transparent")
+        check_updates_row.pack(fill="x", padx=16, pady=(8, 0))
+        ctk.CTkButton(
+            check_updates_row, text=t("settings_check_for_updates_now"), height=28, fg_color="transparent",
+            border_width=1, border_color=C["border"], text_color=C["text_soft"], hover_color=C["card_hover"],
+            command=do_check_for_updates_now,
+        ).pack(side="left" if anchor == "w" else "right")
+        update_status_lbl.pack(fill="x", padx=0, pady=(4, 0))
+
         export_formats = {
             "docx": t("settings_export_format_docx"),
             "txt": t("settings_export_format_txt"),
@@ -1592,6 +1629,7 @@ class Dashboard:
             config["appearance_mode"] = appearance_reverse.get(appearance_var.get(), "system")
             config["notification_enabled"] = bool(notification_var.get())
             config["auto_save_recordings"] = bool(auto_save_var.get())
+            config["check_for_updates_enabled"] = bool(check_updates_var.get())
             config["export_format"] = export_reverse.get(export_var.get(), "docx")
             old_scale = config.get("ui_scale", 1.0)
             config["ui_scale"] = scale_reverse.get(scale_var.get(), 1.0)

@@ -15,6 +15,7 @@ from .overlay import RecordingOverlay
 from .single_instance import acquire
 from .splash import SplashScreen
 from .tray import TrayIcon
+from . import update_checker
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,17 @@ def main():
     threading.Thread(target=tray.run, daemon=True).start()
 
     _register_hotkey(controller)
+
+    def on_update_available(version, url):
+        # Called from the background update-check thread - hop back to the Tk
+        # thread before touching any UI (pystray's own icon is thread-safe for
+        # notify(), but keep this consistent with the rest of the codebase).
+        root.after(0, lambda: update_checker.notify_update_via_tray(tray, version, url))
+
+    # A few seconds after launch, not on startup itself, so the update check never
+    # competes with the app actually becoming usable. Non-blocking: the real work
+    # happens on a background thread (see update_checker.check_for_updates_async).
+    root.after(5000, lambda: update_checker.check_for_updates_async(controller.config, on_update_available))
 
     if not controller.config.get("onboarding_done", False):
         hotkey_before_onboarding = controller.config["hotkey"]
