@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scriptly PC</title>
+<meta name="description" content="Scriptly PC records your microphone and system audio, transcribes and summarizes every conversation with a task list — 100% local, offline, on your own Windows PC.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --paper:#f4f6fb;
+    --paper-raised:#ffffff;
+    --ink:#10151f;
+    --ink-soft:#57647a;
+    --navy:#152847;
+    --navy-soft:#24406b;
+    --teal:#009991;
+    --teal-bright:#00b8ae;
+    --amber:#b9790a;
+    --amber-bright:#e2a52a;
+    --coral:#c73a3a;
+    --coral-bright:#e34848;
+    --green:#178a56;
+    --green-bright:#1caa6b;
+    --line:#d7deea;
+    --shadow: 0 1px 2px rgba(16,21,31,.04), 0 8px 24px rgba(16,21,31,.06);
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0b0f17;
+      --paper-raised:#141b28;
+      --ink:#e8ecf4;
+      --ink-soft:#9aa7bd;
+      --navy:#1c2f52;
+      --navy-soft:#2c4a7c;
+      --teal:#33d0c4;
+      --teal-bright:#12c9bd;
+      --amber:#f0b93c;
+      --amber-bright:#f0b93c;
+      --coral:#f0574f;
+      --coral-bright:#f0574f;
+      --green:#2bc27f;
+      --green-bright:#2bc27f;
+      --line:#263349;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0b0f17;
+    --paper-raised:#141b28;
+    --ink:#e8ecf4;
+    --ink-soft:#9aa7bd;
+    --navy:#1c2f52;
+    --navy-soft:#2c4a7c;
+    --teal:#33d0c4;
+    --teal-bright:#12c9bd;
+    --amber:#f0b93c;
+    --amber-bright:#f0b93c;
+    --coral:#f0574f;
+    --coral-bright:#f0574f;
+    --green:#2bc27f;
+    --green-bright:#2bc27f;
+    --line:#263349;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:16px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--teal-bright); color:#04211f; }
+
+  h1,h2,h3{ font-family:var(--display); text-wrap:balance; margin:0; color:var(--ink); }
+  p{ margin:0; }
+  a{ color:inherit; }
+  .wrap{ max-width:1120px; margin:0 auto; padding:0 32px; }
+  .prose{ max-width:640px; }
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--teal); display:flex; align-items:center; gap:8px; font-weight:500;
+  }
+  .eyebrow::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--teal-bright); flex:none; }
+  code, .mono{ font-family:var(--mono); }
+  .kbd{
+    font-family:var(--mono); font-size:.82em; background:var(--paper); border:1px solid var(--line);
+    border-bottom-width:2px; border-radius:6px; padding:.12em .5em; color:var(--ink);
+  }
+
+  /* ---------- i18n ---------- */
+  html[data-lang="en"] .lang-he{ display:none; }
+  html[data-lang="he"] .lang-en{ display:none; }
+  .lang-toggle{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.02em;
+    background:none; border:1px solid var(--line); color:var(--ink-soft);
+    padding:6px 13px; border-radius:999px; cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .lang-toggle:hover, .lang-toggle:focus-visible{ border-color:var(--teal); color:var(--teal); outline:none; }
+
+  /* ---------- masthead ---------- */
+  header.masthead{ padding:56px 0 0; }
+  .brandrow{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .brand{ display:flex; align-items:center; gap:10px; font-family:var(--display); font-weight:700; font-size:19px; }
+  .brand svg{ width:30px; height:30px; flex:none; }
+  nav.toplinks{ display:flex; align-items:center; gap:28px; font-size:14px; color:var(--ink-soft); }
+  nav.toplinks a{ text-decoration:none; }
+  nav.toplinks a:hover{ color:var(--ink); }
+  nav.toplinks a:focus-visible, .brand:focus-visible{ outline:2px solid var(--teal-bright); outline-offset:3px; border-radius:4px; }
+
+  .hero{
+    display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center;
+    padding:64px 0 88px;
+  }
+  .hero h1{ font-size:clamp(40px,5vw,60px); line-height:1.03; letter-spacing:-.01em; margin:18px 0 20px; }
+  .hero h1 em{ font-style:normal; color:var(--teal); }
+  .hero .lede{ font-size:18px; color:var(--ink-soft); max-width:46ch; }
+  .hero .statusline{
+    margin-top:30px; display:inline-flex; align-items:center; gap:10px;
+    font-family:var(--mono); font-size:13px; color:var(--ink-soft);
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:999px;
+    padding:8px 16px 8px 12px; box-shadow:var(--shadow);
+  }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--teal-bright); flex:none; }
+  .dot.rec{ background:var(--coral-bright); }
+  .dot.busy{ background:var(--amber-bright); }
+  .dot.done{ background:var(--green-bright); }
+
+  .cta-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--body); font-weight:600; font-size:14.5px;
+    padding:12px 20px; border-radius:10px; text-decoration:none; border:1px solid transparent;
+  }
+  .btn.primary{ background:var(--teal); color:#fff; box-shadow:var(--shadow); }
+  .btn.primary:hover{ background:var(--teal-bright); }
+  .btn.ghost{ border-color:var(--line); color:var(--ink); }
+  .btn.ghost:hover{ border-color:var(--teal); color:var(--teal); }
+
+  /* mini app mock */
+  .appmock{
+    background:var(--navy); border-radius:18px; padding:14px; box-shadow:var(--shadow);
+    border:1px solid color-mix(in srgb, var(--navy) 60%, black 10%);
+  }
+  .appmock .titlebar{ display:flex; gap:6px; padding:2px 8px 12px; }
+  .appmock .tb-dot{ width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); }
+  .appmock .stage{
+    background:var(--paper-raised); border-radius:12px; display:grid;
+    grid-template-columns:128px 1fr; min-height:270px; overflow:hidden;
+  }
+  .appmock .list{ border-inline-end:1px solid var(--line); padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .appmock .row{ display:flex; gap:7px; align-items:flex-start; }
+  .appmock .bar{ width:3px; align-self:stretch; border-radius:3px; flex:none; }
+  .appmock .row .meta{ display:flex; flex-direction:column; gap:3px; }
+  .appmock .row .t{ font-size:11px; font-weight:600; color:var(--ink); }
+  .appmock .row .s{ font-size:10px; color:var(--ink-soft); }
+  .appmock .row.active{ background:color-mix(in srgb, var(--teal-bright) 14%, transparent); border-radius:8px; margin:-4px; padding:4px; }
+  .appmock .panel{ padding:16px 18px; }
+  .appmock .panel h4{ font-family:var(--display); font-size:13px; margin:0 0 8px; color:var(--navy); }
+  .appmock .panel .tag{
+    display:inline-block; font-family:var(--mono); font-size:10px; color:var(--teal);
+    border:1px solid var(--line); border-radius:999px; padding:1px 8px; margin:0 0 10px;
+  }
+  .appmock .panel .line{ display:flex; gap:8px; font-size:11.5px; color:var(--ink); margin:6px 0; align-items:flex-start; }
+  .appmock .panel .line::before{ content:"—"; color:var(--ink-soft); flex:none; }
+  .appmock .panel .task{ display:flex; gap:8px; font-size:11.5px; margin:6px 0; align-items:flex-start; }
+  .appmock .panel .box{ width:12px; height:12px; border:1.4px solid var(--teal); border-radius:3px; margin-top:2px; flex:none; }
+
+  /* ---------- sections ---------- */
+  section{ padding:64px 0; border-top:1px solid var(--line); }
+  section.tight{ padding:52px 0; }
+  .section-head{ display:flex; flex-direction:column; gap:14px; margin-bottom:40px; }
+  .section-head h2{ font-size:clamp(26px,3vw,34px); max-width:16ch; }
+  .section-head p{ color:var(--ink-soft); max-width:56ch; font-size:15.5px; }
+
+  .problem-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:28px; }
+  .problem-grid .card{ display:flex; flex-direction:column; gap:10px; }
+  .problem-grid .num{ font-family:var(--mono); color:var(--ink-soft); font-size:13px; }
+  .problem-grid h3{ font-size:18px; }
+  .problem-grid p{ color:var(--ink-soft); font-size:14.5px; }
+
+  /* pipeline diagram */
+  figure.diagram{ margin:0; }
+  figure.diagram svg{ width:100%; height:auto; display:block; }
+  figure.diagram figcaption{ margin-top:14px; font-size:13.5px; color:var(--ink-soft); }
+  .diagram-scroll{ overflow-x:auto; padding-bottom:4px; }
+  .diagram-scroll figure.diagram svg{ width:1040px; max-width:none; }
+  @media (min-width:1120px){ .diagram-scroll figure.diagram svg{ width:100%; } }
+
+  /* spec sheet (features grounded in real Settings panel) */
+  .specsheet{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .specsheet .col{ background:var(--paper-raised); padding:26px 24px; display:flex; flex-direction:column; gap:16px; }
+  .specsheet .col h3{ font-size:12px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.06em; color:var(--teal); }
+  .specsheet .item{ display:flex; flex-direction:column; gap:3px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+  .specsheet .item:last-child{ border-bottom:none; padding-bottom:0; }
+  .specsheet .item .k{ font-size:14px; font-weight:600; }
+  .specsheet .item .v{ font-size:13px; color:var(--ink-soft); }
+
+  /* privacy boundary */
+  .privacy{ display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; }
+  .privacy .prose h2{ margin-bottom:14px; }
+  .privacy .prose p{ color:var(--ink-soft); font-size:15.5px; margin-top:14px; }
+  .privacy ul{ margin:20px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .privacy li{ display:flex; gap:10px; font-size:14.5px; align-items:baseline; }
+  .privacy li::before{ content:"✓"; color:var(--green); font-family:var(--mono); flex:none; }
+
+  /* tech spec strip */
+  .techgrid{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .techgrid .cell{ background:var(--paper-raised); padding:20px; display:flex; flex-direction:column; gap:6px; }
+  .techgrid .cell .k{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+  .techgrid .cell .v{ font-family:var(--mono); font-size:13.5px; color:var(--ink); }
+
+  /* download */
+  .downloadbox{
+    display:flex; flex-direction:column; align-items:flex-start; gap:16px;
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:16px;
+    padding:32px; box-shadow:var(--shadow);
+  }
+  .dlbtn{
+    display:inline-flex; align-items:center; gap:10px; font-family:var(--body); font-weight:700; font-size:16px;
+    background:var(--teal); color:#fff; padding:15px 26px; border-radius:12px; text-decoration:none;
+    box-shadow:var(--shadow);
+  }
+  .dlbtn:hover{ background:var(--teal-bright); }
+  .dlbtn .size{ font-family:var(--mono); font-weight:500; font-size:13px; opacity:.85; }
+  .dlnote{ font-size:13.5px; color:var(--ink-soft); max-width:60ch; }
+  .dlmeta{ display:flex; flex-wrap:wrap; gap:18px; font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); }
+
+  footer{ padding:40px 0 56px; }
+  .footrow{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  footer .brand{ font-size:15px; }
+  footer .fine{ font-family:var(--mono); font-size:12px; color:var(--ink-soft); }
+
+  @media (max-width:860px){
+    .hero{ grid-template-columns:1fr; }
+    .problem-grid{ grid-template-columns:1fr; }
+    .specsheet{ grid-template-columns:1fr; }
+    .privacy{ grid-template-columns:1fr; }
+    .techgrid{ grid-template-columns:repeat(2,1fr); }
+    nav.toplinks{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================== ENGLISH (default) ============================== -->
+<div class="lang-en">
+
+<header class="masthead wrap">
+  <div class="brandrow">
+    <a class="brand" href="#top" id="top">
+      <svg viewBox="0 0 64 64" role="img" aria-label="Scriptly PC logo">
+        <circle cx="32" cy="32" r="30" fill="var(--navy)"/>
+        <g fill="var(--teal-bright)">
+          <rect x="14" y="26" width="4" height="12" rx="2"/>
+          <rect x="21" y="20" width="4" height="24" rx="2"/>
+          <rect x="28" y="14" width="4" height="36" rx="2"/>
+          <rect x="35" y="22" width="4" height="20" rx="2"/>
+          <rect x="42" y="27" width="4" height="10" rx="2"/>
+        </g>
+        <circle cx="47" cy="47" r="13" fill="var(--paper-raised)"/>
+        <path d="M41.5 47.5l3.5 3.5 8-8" fill="none" stroke="var(--teal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Scriptly PC
+    </a>
+    <nav class="toplinks">
+      <a href="#how">How it works</a>
+      <a href="#features">Inside the app</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#tech">Under the hood</a>
+      <a href="#download">Download</a>
+    </nav>
+    <button class="lang-toggle" onclick="setSiteLang('he')" aria-label="Switch to Hebrew">🌐 עברית</button>
+  </div>
+</header>
+
+<section class="hero wrap" style="border-top:none;">
+  <div>
+    <p class="eyebrow">Local · Offline · Windows</p>
+    <h1>Every conversation<br>on your PC, <em>written down.</em></h1>
+    <p class="lede">Scriptly PC listens to your microphone and whatever's playing through your speakers at once, then turns the conversation into a transcript, a summary, and a task list — without an internet connection.</p>
+    <div class="statusline"><span class="dot"></span> Ready to record — <span class="mono">Ctrl+Alt+M</span> from anywhere</div>
+    <div class="cta-row">
+      <a class="btn primary" href="#download">⬇ Download for Windows</a>
+      <a class="btn ghost" href="#how">See how it works ↓</a>
+    </div>
+  </div>
+
+  <div class="appmock" aria-hidden="true">
+    <div class="titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+    <div class="stage">
+      <div class="list">
+        <div class="row active">
+          <span class="bar" style="background:var(--green-bright)"></span>
+          <span class="meta"><span class="t">Renewal call — Dana</span><span class="s">Today · 14:02</span></span>
+        </div>
+        <div class="row">
+          <span class="bar" style="background:var(--amber-bright)"></span>
+          <span class="meta"><span class="t">Transcribing…</span><span class="s">Today · 11:40</span></span>
+        </div>
+        <div class="row">
+          <span class="bar" style="background:var(--green-bright)"></span>
+          <span class="meta"><span class="t">Team standup</span><span class="s">Yesterday</span></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>Summary</h4>
+        <span class="tag">#renewal</span>
+        <p class="line">Client wants to extend the plan through Q4, pending updated pricing.</p>
+        <p class="line">Follow-up pricing sheet promised by Thursday.</p>
+        <h4 style="margin-top:14px">Tasks</h4>
+        <div class="task"><span class="box"></span> Send updated pricing sheet — Dana, by Thu</div>
+        <div class="task"><span class="box"></span> Loop in billing for the Q4 term</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="problem">
+  <div class="section-head">
+    <h2>The conversation ends. The notes don't exist.</h2>
+    <p>Every unrecorded call is a bet that someone remembers the deadline correctly. Most don't.</p>
+  </div>
+  <div class="problem-grid">
+    <div class="card">
+      <span class="num">01</span>
+      <h3>Nothing was written</h3>
+      <p>Sales calls, standups, and client conversations happen inside Zoom, a browser tab, or a phone bridge — and end with nothing but memory.</p>
+    </div>
+    <div class="card">
+      <span class="num">02</span>
+      <h3>Cloud notetakers cost per seat</h3>
+      <p>Otter, Fireflies, and Fathom all work well — but they route your audio through someone else's servers, and bill monthly for it.</p>
+    </div>
+    <div class="card">
+      <span class="num">03</span>
+      <h3>So Scriptly PC stays on the machine</h3>
+      <p>Same idea — capture, transcribe, summarize — run entirely on your own GPU, for the cost of the electricity.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="how">
+  <div class="section-head">
+    <h2>How it works, in one signal path</h2>
+    <p>Four stages, each writing a real file to disk before handing off to the next. Nothing here calls out to the internet.</p>
+  </div>
+
+  <div class="diagram-scroll">
+  <figure class="diagram">
+    <svg viewBox="0 0 1040 300" role="img" aria-label="Pipeline diagram: microphone and system audio merge into recording.wav, faster-whisper transcribes it into timestamped segments, Ollama turns the transcript into a summary, and the dashboard organizes the result.">
+      <defs>
+        <marker id="arrow-en" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55" font-family="IBM Plex Mono, monospace">
+        <!-- input waveforms -->
+        <polyline points="20,90 30,80 40,100 50,72 60,104 70,86 80,96" stroke="var(--teal-bright)"/>
+        <polyline points="20,130 30,138 40,122 50,142 60,118 70,134 80,126" stroke="var(--navy-soft)"/>
+      </g>
+      <text x="20" y="70" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">mic</text>
+      <text x="20" y="156" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">system audio</text>
+
+      <line x1="86" y1="110" x2="150" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-en)"/>
+
+      <!-- stage 1 -->
+      <rect x="150" y="78" width="130" height="64" rx="10" fill="var(--paper-raised)" stroke="var(--line)"/>
+      <text x="215" y="104" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="var(--ink)">Capture</text>
+      <text x="215" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-soft)">WASAPI loopback</text>
+
+      <line x1="280" y1="110" x2="344" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-en)"/>
+      <text x="312" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">recording.wav</text>
+
+      <!-- stage 2 -->
+      <rect x="344" y="70" width="150" height="80" rx="10" fill="var(--navy)"/>
+      <text x="419" y="98" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="#fff">Transcribe</text>
+      <text x="419" y="116" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--teal-bright)">faster-whisper</text>
+      <text x="419" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--teal-bright)">ivrit-ai · GPU</text>
+
+      <line x1="494" y1="110" x2="558" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-en)"/>
+      <text x="526" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">segments+timestamps</text>
+
+      <!-- stage 3 -->
+      <rect x="558" y="78" width="150" height="64" rx="10" fill="var(--paper-raised)" stroke="var(--line)"/>
+      <text x="633" y="104" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="var(--ink)">Understand</text>
+      <text x="633" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">Ollama · aya-expanse</text>
+
+      <line x1="708" y1="110" x2="772" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-en)"/>
+      <text x="740" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">summary.md</text>
+
+      <!-- stage 4 -->
+      <rect x="772" y="70" width="150" height="80" rx="10" fill="var(--teal)"/>
+      <text x="847" y="98" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="#04211f">Organize</text>
+      <text x="847" y="116" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#04211f">search · tags</text>
+      <text x="847" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#04211f">export · stats</text>
+
+      <!-- speaker split annotation under stage 2 -->
+      <line x1="419" y1="150" x2="419" y2="188" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+      <rect x="349" y="188" width="140" height="46" rx="8" fill="none" stroke="var(--line)"/>
+      <text x="419" y="207" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">mic louder → "You:"</text>
+      <text x="419" y="221" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">speaker louder → "Other side:"</text>
+
+      <line x1="847" y1="150" x2="847" y2="188" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+      <rect x="757" y="188" width="180" height="46" rx="8" fill="none" stroke="var(--line)"/>
+      <text x="847" y="207" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">everything written to</text>
+      <text x="847" y="221" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">Meetings\2026-…\ on this PC</text>
+    </svg>
+    <figcaption>Both audio sources are kept separate long enough to tell who was talking, then merged into one file. A built-in size cap stops and saves the recording automatically if it's ever left running for hours by mistake. No stage requires a network connection.</figcaption>
+  </figure>
+  </div>
+</section>
+
+<section class="wrap" id="features">
+  <div class="section-head">
+    <h2>Everything in the Settings panel</h2>
+    <p>Not a marketing feature list — this is the actual settings dialog, grouped the same way it is in the app.</p>
+  </div>
+  <div class="specsheet">
+    <div class="col">
+      <h3>Recording</h3>
+      <div class="item"><span class="k">Global hotkey</span><span class="v">Default <span class="kbd">Ctrl+Alt+M</span>, works inside any app</span></div>
+      <div class="item"><span class="k">Microphone picker + test</span><span class="v">Choose a device, hear the level before you rely on it</span></div>
+      <div class="item"><span class="k">Auto-summarize toggle</span><span class="v">Off skips test recordings — process later with "Summarize Now"</span></div>
+      <div class="item"><span class="k">Keep audio file</span><span class="v">Off by default; the .wav is deleted once text exists</span></div>
+      <div class="item"><span class="k">In-app playback</span><span class="v">If you kept the audio, play it back right from the recording view — no external player</span></div>
+      <div class="item"><span class="k">Floating record button</span><span class="v">One click from the desktop, no hotkey — becomes a timer + stop HUD once recording starts</span></div>
+      <div class="item"><span class="k">Voice commands</span><span class="v">Off by default — click 🎤, then say "start recording" / "stop recording" (English or Hebrew)</span></div>
+      <div class="item"><span class="k">Max recording size (GB)</span><span class="v">New in v0.12 — a memory-safety cap that auto-stops and saves a recording that's been left running for hours, instead of risking an out-of-memory crash</span></div>
+    </div>
+    <div class="col">
+      <h3>Transcription &amp; Summary</h3>
+      <div class="item"><span class="k">Hebrew ASR</span><span class="v"><code>ivrit-ai/whisper-large-v3-turbo-ct2</code> on your GPU</span></div>
+      <div class="item"><span class="k">Custom vocabulary</span><span class="v">Feed it names and product terms it keeps mishearing</span></div>
+      <div class="item"><span class="k">Speaker labels</span><span class="v">"You" / "Other side", detected from mic vs. speaker volume</span></div>
+      <div class="item"><span class="k">AI titles &amp; topic tags</span><span class="v">Names each recording from its summary — "Renewal call - Dana" — and auto-assigns a topic tag like <span class="mono">#renewal</span>, no manual filing needed</span></div>
+      <div class="item"><span class="k">No-content guard</span><span class="v">Won't invent a meeting out of "test, test, one two three"</span></div>
+      <div class="item"><span class="k">"Likely background noise" filter</span><span class="v">New in v0.12 — flags and can hide recordings that were probably just ambient noise, not a real conversation</span></div>
+      <div class="item"><span class="k">Long recordings</span><span class="v">Past ~30 minutes, the transcript is split, summarized in parts, then merged into one summary</span></div>
+      <div class="item"><span class="k">Tone detection</span><span class="v">Each recording tagged positive / neutral / tense from its summary — tense ones get flagged ⚠</span></div>
+    </div>
+    <div class="col">
+      <h3>Interface</h3>
+      <div class="item"><span class="k">My Tasks</span><span class="v">Every task from every recording, in one checklist — check one off, it's saved for good</span></div>
+      <div class="item"><span class="k">Insights dashboard</span><span class="v">Talk-time ratio, a 14-day trend, tone breakdown, and top tags — computed from your own recordings</span></div>
+      <div class="item"><span class="k">Google Tasks / Calendar</span><span class="v">Off by default — connect your own account, then send one task at a time with a click. Never the transcript</span></div>
+      <div class="item"><span class="k">Search</span><span class="v">Matches transcript text, tags, and your own notes</span></div>
+      <div class="item"><span class="k">Tags &amp; notes</span><span class="v">File a call under a client name; nothing gets lost in a folder</span></div>
+      <div class="item"><span class="k">Export</span><span class="v">One recording as <code>.docx</code> or <code>.srt</code> captions (new in v0.12) — or a whole week/month as one combined digest</span></div>
+      <div class="item"><span class="k">Language + theme</span><span class="v">English or Hebrew UI; light, dark, or follows Windows</span></div>
+      <div class="item"><span class="k">Text size</span><span class="v">Normal, Large, or Extra Large — scales the whole interface</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="privacy wrap" id="privacy">
+  <div class="prose">
+    <p class="eyebrow">Privacy by construction</p>
+    <h2>The recording never has a reason to leave this PC.</h2>
+    <p>There's no account, no API key, and no server Scriptly PC talks to by default. The transcription model and the summarizer both run as local processes on your own machine — turning off Wi-Fi doesn't break anything.</p>
+    <ul>
+      <li>Transcription: local GPU inference, not an API call</li>
+      <li>Summarization: local Ollama model on <span class="mono">localhost</span></li>
+      <li>Built-in check flags it if your recordings folder sits inside OneDrive or Dropbox</li>
+      <li>The one opt-in exception: connect Google in Settings and a single task's text — never the transcript — can be sent to Tasks or Calendar, one click at a time</li>
+    </ul>
+  </div>
+  <figure class="diagram">
+    <svg viewBox="0 0 460 300" role="img" aria-label="Diagram showing microphone, transcription, and summarization all inside a boundary labeled This PC, with a crossed-out arrow toward the internet showing zero bytes leave the machine.">
+      <defs>
+        <marker id="arrow-en-2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect x="20" y="20" width="420" height="220" rx="16" fill="none" stroke="var(--line)" stroke-width="1.4"/>
+      <text x="36" y="44" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" fill="var(--ink-soft)">THIS PC</text>
+
+      <g font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="12.5">
+        <rect x="44" y="66" width="120" height="46" rx="9" fill="var(--paper-raised)" stroke="var(--line)"/>
+        <text x="104" y="94" text-anchor="middle" fill="var(--ink)">Microphone</text>
+
+        <rect x="44" y="128" width="120" height="46" rx="9" fill="var(--paper-raised)" stroke="var(--line)"/>
+        <text x="104" y="156" text-anchor="middle" fill="var(--ink)">Speakers</text>
+
+        <rect x="196" y="96" width="120" height="46" rx="9" fill="var(--navy)"/>
+        <text x="256" y="124" text-anchor="middle" fill="#fff">Whisper</text>
+
+        <rect x="196" y="158" width="120" height="46" rx="9" fill="var(--navy)"/>
+        <text x="256" y="186" text-anchor="middle" fill="#fff">Ollama</text>
+
+        <rect x="348" y="127" width="80" height="46" rx="9" fill="var(--teal)"/>
+        <text x="388" y="155" text-anchor="middle" fill="#04211f">Dashboard</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1.3" fill="none" opacity=".7">
+        <line x1="164" y1="89" x2="196" y2="115" marker-end="url(#arrow-en-2)"/>
+        <line x1="164" y1="151" x2="196" y2="125" marker-end="url(#arrow-en-2)"/>
+        <line x1="256" y1="142" x2="256" y2="158" marker-end="url(#arrow-en-2)"/>
+        <line x1="316" y1="180" x2="348" y2="158" marker-end="url(#arrow-en-2)"/>
+      </g>
+
+      <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--coral)">
+        <line x1="388" y1="127" x2="388" y2="70" stroke="var(--coral)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <line x1="374" y1="84" x2="402" y2="56" stroke="var(--coral)" stroke-width="2"/>
+        <line x1="374" y1="56" x2="402" y2="84" stroke="var(--coral)" stroke-width="2"/>
+        <text x="388" y="46" text-anchor="middle">0 bytes to the internet</text>
+      </g>
+    </svg>
+    <figcaption>Every component in the path — capture, transcription, summarization, storage — sits inside the same machine.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="tech">
+  <div class="section-head">
+    <h2>Under the hood</h2>
+    <p>For the curious: exactly what's running, and what it needs.</p>
+  </div>
+  <div class="techgrid">
+    <div class="cell"><span class="k">ASR model</span><span class="v">ivrit-ai/whisper-large-v3-turbo-ct2</span></div>
+    <div class="cell"><span class="k">Inference engine</span><span class="v">faster-whisper (CTranslate2, CUDA)</span></div>
+    <div class="cell"><span class="k">Summarizer</span><span class="v">aya-expanse:8b via Ollama</span></div>
+    <div class="cell"><span class="k">Interface</span><span class="v">CustomTkinter, light/dark</span></div>
+    <div class="cell"><span class="k">OS</span><span class="v">Windows 10 / 11</span></div>
+    <div class="cell"><span class="k">Recommended GPU</span><span class="v">8GB VRAM (tested on RTX 4060)</span></div>
+    <div class="cell"><span class="k">Disk for models</span><span class="v">~7GB, downloaded once</span></div>
+    <div class="cell"><span class="k">Network required</span><span class="v">None, after setup</span></div>
+  </div>
+</section>
+
+<section class="wrap" id="download">
+  <div class="section-head">
+    <h2>Get Scriptly PC</h2>
+    <p>One installer, everything included. No account, no subscription, no cloud dependency.</p>
+  </div>
+  <div class="downloadbox">
+    <a class="dlbtn" href="../Scriptly-PC-Setup-0.12.0.exe" download>⬇ Download for Windows <span class="size">v0.12.0 · 952 MB</span></a>
+    <div class="dlmeta">
+      <span>Windows 10 / 11 · 64-bit</span>
+      <span>NVIDIA GPU recommended (8GB VRAM+)</span>
+      <span>Free — no account required</span>
+    </div>
+    <p class="dlnote">The installer bundles the app itself; on first run it downloads the Whisper and Ollama models (~7GB) once, over your own connection. After that, Scriptly PC never needs the internet again.</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="footrow">
+    <span class="brand" style="display:flex;align-items:center;gap:8px;">
+      <svg viewBox="0 0 64 64" width="20" height="20" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="var(--navy)"/>
+        <g fill="var(--teal-bright)">
+          <rect x="14" y="26" width="4" height="12" rx="2"/><rect x="21" y="20" width="4" height="24" rx="2"/>
+          <rect x="28" y="14" width="4" height="36" rx="2"/><rect x="35" y="22" width="4" height="20" rx="2"/>
+          <rect x="42" y="27" width="4" height="10" rx="2"/>
+        </g>
+      </svg>
+      Scriptly PC
+    </span>
+    <span class="fine">v0.12.0 · records, transcribes, summarizes — stays on this machine unless you say otherwise</span>
+  </div>
+</footer>
+
+</div>
+
+<!-- ============================== HEBREW ============================== -->
+<div class="lang-he" dir="rtl" lang="he">
+
+<header class="masthead wrap">
+  <div class="brandrow">
+    <a class="brand" href="#top-he" id="top-he">
+      <svg viewBox="0 0 64 64" role="img" aria-label="לוגו Scriptly PC">
+        <circle cx="32" cy="32" r="30" fill="var(--navy)"/>
+        <g fill="var(--teal-bright)">
+          <rect x="14" y="26" width="4" height="12" rx="2"/>
+          <rect x="21" y="20" width="4" height="24" rx="2"/>
+          <rect x="28" y="14" width="4" height="36" rx="2"/>
+          <rect x="35" y="22" width="4" height="20" rx="2"/>
+          <rect x="42" y="27" width="4" height="10" rx="2"/>
+        </g>
+        <circle cx="47" cy="47" r="13" fill="var(--paper-raised)"/>
+        <path d="M41.5 47.5l3.5 3.5 8-8" fill="none" stroke="var(--teal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Scriptly PC
+    </a>
+    <nav class="toplinks">
+      <a href="#how-he">איך זה עובד</a>
+      <a href="#features-he">בתוך האפליקציה</a>
+      <a href="#privacy-he">פרטיות</a>
+      <a href="#tech-he">מתחת למכסה המנוע</a>
+      <a href="#download-he">הורדה</a>
+    </nav>
+    <button class="lang-toggle" onclick="setSiteLang('en')" aria-label="עבור לאנגלית">🌐 English</button>
+  </div>
+</header>
+
+<section class="hero wrap" style="border-top:none;">
+  <div>
+    <p class="eyebrow">מקומי · אופליין · Windows</p>
+    <h1>כל שיחה<br>במחשב שלך, <em>כתובה.</em></h1>
+    <p class="lede">Scriptly PC מאזין למיקרופון שלך ולכל מה שמתנגן דרך הרמקולים בו-זמנית, והופך את השיחה לתמליל, סיכום ורשימת משימות — בלי חיבור לאינטרנט.</p>
+    <div class="statusline"><span class="dot"></span> מוכן להקליט — <span class="mono">Ctrl+Alt+M</span> מכל מקום</div>
+    <div class="cta-row">
+      <a class="btn primary" href="#download-he">⬇ הורדה ל-Windows</a>
+      <a class="btn ghost" href="#how-he">↓ איך זה עובד</a>
+    </div>
+  </div>
+
+  <div class="appmock" aria-hidden="true">
+    <div class="titlebar"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+    <div class="stage">
+      <div class="list">
+        <div class="row active">
+          <span class="bar" style="background:var(--green-bright)"></span>
+          <span class="meta"><span class="t">שיחת חידוש — דנה</span><span class="s">היום · 14:02</span></span>
+        </div>
+        <div class="row">
+          <span class="bar" style="background:var(--amber-bright)"></span>
+          <span class="meta"><span class="t">מתמלל…</span><span class="s">היום · 11:40</span></span>
+        </div>
+        <div class="row">
+          <span class="bar" style="background:var(--green-bright)"></span>
+          <span class="meta"><span class="t">עמידה צוותית</span><span class="s">אתמול</span></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>סיכום</h4>
+        <span class="tag">#חידוש</span>
+        <p class="line">הלקוח מעוניין להאריך את התוכנית עד סוף Q4, בכפוף לתמחור מעודכן.</p>
+        <p class="line">הובטח גיליון תמחור עד יום חמישי.</p>
+        <h4 style="margin-top:14px">משימות</h4>
+        <div class="task"><span class="box"></span> לשלוח גיליון תמחור מעודכן — דנה, עד יום ה'</div>
+        <div class="task"><span class="box"></span> לשתף את הנהלת החשבונות לגבי תקופת Q4</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="problem-he">
+  <div class="section-head">
+    <h2>השיחה נגמרת. הרשימות לא קיימות.</h2>
+    <p>כל שיחה שלא הוקלטה היא הימור שמישהו יזכור נכון את מועד היעד. ברוב המקרים לא.</p>
+  </div>
+  <div class="problem-grid">
+    <div class="card">
+      <span class="num">01</span>
+      <h3>שום דבר לא נכתב</h3>
+      <p>שיחות מכירות, עמידות צוות ושיחות עם לקוחות קורות בתוך Zoom, כרטיסיית דפדפן או גשר טלפוני — ומסתיימות בלי כלום מלבד הזיכרון.</p>
+    </div>
+    <div class="card">
+      <span class="num">02</span>
+      <h3>כלי הקלטה בענן עולים לפי מושב</h3>
+      <p>Otter, Fireflies ו-Fathom עובדים מצוין — אבל הם מעבירים את האודיו שלך דרך שרתים של מישהו אחר, וגובים תשלום חודשי על כך.</p>
+    </div>
+    <div class="card">
+      <span class="num">03</span>
+      <h3>לכן Scriptly PC נשאר על המכונה</h3>
+      <p>אותו רעיון — לכידה, תמלול, סיכום — פועל כולו על ה-GPU שלך, במחיר החשמל בלבד.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="how-he">
+  <div class="section-head">
+    <h2>איך זה עובד, בנתיב אות אחד</h2>
+    <p>ארבעה שלבים, כל אחד כותב קובץ אמיתי לדיסק לפני שהוא מעביר לשלב הבא. שום שלב לא פונה לאינטרנט.</p>
+  </div>
+
+  <div class="diagram-scroll">
+  <figure class="diagram">
+    <svg viewBox="0 0 1040 300" role="img" aria-label="תרשים צנרת: מיקרופון ואודיו מערכת מתמזגים לקובץ recording.wav, faster-whisper מתמלל אותו לקטעים עם חותמות זמן, Ollama הופך את התמליל לסיכום, והדשבורד מארגן את התוצאה.">
+      <defs>
+        <marker id="arrow-he" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55" font-family="IBM Plex Mono, monospace">
+        <polyline points="20,90 30,80 40,100 50,72 60,104 70,86 80,96" stroke="var(--teal-bright)"/>
+        <polyline points="20,130 30,138 40,122 50,142 60,118 70,134 80,126" stroke="var(--navy-soft)"/>
+      </g>
+      <text x="20" y="70" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">מיקרופון</text>
+      <text x="20" y="156" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">אודיו מערכת</text>
+
+      <line x1="86" y1="110" x2="150" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-he)"/>
+
+      <!-- stage 1 -->
+      <rect x="150" y="78" width="130" height="64" rx="10" fill="var(--paper-raised)" stroke="var(--line)"/>
+      <text x="215" y="104" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="var(--ink)">לכידה</text>
+      <text x="215" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-soft)">WASAPI loopback</text>
+
+      <line x1="280" y1="110" x2="344" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-he)"/>
+      <text x="312" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">recording.wav</text>
+
+      <!-- stage 2 -->
+      <rect x="344" y="70" width="150" height="80" rx="10" fill="var(--navy)"/>
+      <text x="419" y="98" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="#fff">תמלול</text>
+      <text x="419" y="116" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--teal-bright)">faster-whisper</text>
+      <text x="419" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--teal-bright)">ivrit-ai · GPU</text>
+
+      <line x1="494" y1="110" x2="558" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-he)"/>
+      <text x="526" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">קטעים+חותמות זמן</text>
+
+      <!-- stage 3 -->
+      <rect x="558" y="78" width="150" height="64" rx="10" fill="var(--paper-raised)" stroke="var(--line)"/>
+      <text x="633" y="104" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="var(--ink)">הבנה</text>
+      <text x="633" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">Ollama · aya-expanse</text>
+
+      <line x1="708" y1="110" x2="772" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow-he)"/>
+      <text x="740" y="100" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">summary.md</text>
+
+      <!-- stage 4 -->
+      <rect x="772" y="70" width="150" height="80" rx="10" fill="var(--teal)"/>
+      <text x="847" y="98" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="14" fill="#04211f">ארגון</text>
+      <text x="847" y="116" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#04211f">חיפוש · תגיות</text>
+      <text x="847" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#04211f">ייצוא · סטטיסטיקה</text>
+
+      <!-- speaker split annotation under stage 2 -->
+      <line x1="419" y1="150" x2="419" y2="188" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+      <rect x="349" y="188" width="140" height="46" rx="8" fill="none" stroke="var(--line)"/>
+      <text x="419" y="207" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">מיקרופון חזק יותר ← "אתה:"</text>
+      <text x="419" y="221" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">רמקול חזק יותר ← "הצד השני:"</text>
+
+      <line x1="847" y1="150" x2="847" y2="188" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+      <rect x="757" y="188" width="180" height="46" rx="8" fill="none" stroke="var(--line)"/>
+      <text x="847" y="207" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">הכל נכתב אל</text>
+      <text x="847" y="221" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-soft)">Meetings\2026-…\ במחשב הזה</text>
+    </svg>
+    <figcaption>שני מקורות האודיו נשמרים נפרדים מספיק זמן כדי לדעת מי דיבר, ואז מתמזגים לקובץ אחד. תקרת גודל מובנית עוצרת ושומרת את ההקלטה אוטומטית אם היא נשארה פועלת בטעות שעות ארוכות. שום שלב לא דורש חיבור לרשת.</figcaption>
+  </figure>
+  </div>
+</section>
+
+<section class="wrap" id="features-he">
+  <div class="section-head">
+    <h2>הכל בחלון ההגדרות</h2>
+    <p>לא רשימת פיצ'רים שיווקית — זה חלון ההגדרות בפועל, מקובץ באותו אופן שבו הוא מוצג באפליקציה.</p>
+  </div>
+  <div class="specsheet">
+    <div class="col">
+      <h3>הקלטה</h3>
+      <div class="item"><span class="k">קיצור מקלדת גלובלי</span><span class="v">ברירת מחדל <span class="kbd">Ctrl+Alt+M</span>, עובד מכל אפליקציה</span></div>
+      <div class="item"><span class="k">בחירת מיקרופון + בדיקה</span><span class="v">בחרו התקן, שמעו את הרמה לפני שאתם סומכים עליו</span></div>
+      <div class="item"><span class="k">מתג סיכום אוטומטי</span><span class="v">כיבוי מדלג על הקלטות בדיקה — עבדו עליהן מאוחר יותר עם "סכם עכשיו"</span></div>
+      <div class="item"><span class="k">שמירת קובץ האודיו</span><span class="v">כבוי כברירת מחדל; קובץ ה-wav. נמחק ברגע שיש טקסט</span></div>
+      <div class="item"><span class="k">נגינה בתוך האפליקציה</span><span class="v">אם שמרתם את האודיו, נגנו אותו ישירות ממסך ההקלטה — בלי נגן חיצוני</span></div>
+      <div class="item"><span class="k">כפתור הקלטה צף</span><span class="v">קליק אחד מהדסקטופ, בלי קיצור מקלדת — הופך לטיימר + HUD עצירה ברגע שההקלטה מתחילה</span></div>
+      <div class="item"><span class="k">פקודות קוליות</span><span class="v">כבוי כברירת מחדל — לחצו 🎤 ואמרו "התחל הקלטה" / "עצור הקלטה" (עברית או אנגלית)</span></div>
+      <div class="item"><span class="k">גודל הקלטה מקסימלי (GB)</span><span class="v">חדש בגרסה 0.12 — רשת ביטחון זיכרון שעוצרת ושומרת אוטומטית הקלטה שנשארה פועלת שעות, במקום לסכן קריסת האפליקציה</span></div>
+    </div>
+    <div class="col">
+      <h3>תמלול וסיכום</h3>
+      <div class="item"><span class="k">זיהוי דיבור בעברית</span><span class="v"><code>ivrit-ai/whisper-large-v3-turbo-ct2</code> על ה-GPU שלכם</span></div>
+      <div class="item"><span class="k">מילון מותאם אישית</span><span class="v">הזינו שמות ומונחי מוצר שהמערכת ממשיכה לפספס</span></div>
+      <div class="item"><span class="k">תיוג דוברים</span><span class="v">"אתה" / "הצד השני", מזוהה לפי עוצמת מיקרופון מול רמקול</span></div>
+      <div class="item"><span class="k">כותרות ותגיות נושא אוטומטיות</span><span class="v">שם כל הקלטה על סמך הסיכום שלה — "שיחת חידוש - דנה" — ומצרף אוטומטית תגית נושא כמו <span class="mono">#חידוש</span>, בלי סיווג ידני</span></div>
+      <div class="item"><span class="k">הגנה מפני תוכן ריק</span><span class="v">לא ימציא פגישה מתוך "בדיקה, בדיקה, אחת שתיים שלוש"</span></div>
+      <div class="item"><span class="k">פילטר "כנראה רעש רקע"</span><span class="v">חדש בגרסה 0.12 — מסמן, ואפשר להסתיר, הקלטות שכנראה לא הכילו שיחה אמיתית</span></div>
+      <div class="item"><span class="k">הקלטות ארוכות</span><span class="v">מעל כ-30 דקות, התמליל מפוצל, מסוכם בחלקים, ואז ממוזג לסיכום אחד</span></div>
+      <div class="item"><span class="k">זיהוי טון</span><span class="v">כל הקלטה מתויגת חיובי / ניטרלי / מתוח על סמך הסיכום — מתוחות מסומנות ⚠</span></div>
+    </div>
+    <div class="col">
+      <h3>ממשק</h3>
+      <div class="item"><span class="k">המשימות שלי</span><span class="v">כל משימה מכל הקלטה, ברשימה אחת — סמנו אחת כבוצעה, היא נשמרת לצמיתות</span></div>
+      <div class="item"><span class="k">דשבורד תובנות</span><span class="v">יחס זמן דיבור, מגמה של 14 יום, פילוח טונים, והתגיות המובילות — מחושב מההקלטות שלכם</span></div>
+      <div class="item"><span class="k">Google Tasks / יומן</span><span class="v">כבוי כברירת מחדל — חברו את החשבון שלכם, ואז שלחו משימה אחת בכל פעם בקליק. אף פעם לא את התמליל</span></div>
+      <div class="item"><span class="k">חיפוש</span><span class="v">מתאים לטקסט התמליל, תגיות, וההערות שלכם</span></div>
+      <div class="item"><span class="k">תגיות והערות</span><span class="v">שימרו שיחה תחת שם לקוח; שום דבר לא הולך לאיבוד בתיקייה</span></div>
+      <div class="item"><span class="k">ייצוא</span><span class="v">הקלטה בודדת כ-<code>.docx</code> או כתוביות <code>.srt</code> (חדש בגרסה 0.12) — או שבוע/חודש שלם כדוח מרוכז אחד</span></div>
+      <div class="item"><span class="k">שפה + ערכת נושא</span><span class="v">ממשק בעברית או אנגלית; בהיר, כהה, או לפי Windows</span></div>
+      <div class="item"><span class="k">גודל טקסט</span><span class="v">רגיל, גדול, או גדול מאוד — מגדיל את כל הממשק</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="privacy wrap" id="privacy-he">
+  <div class="prose">
+    <p class="eyebrow">פרטיות מובנית מהיסוד</p>
+    <h2>להקלטה אין שום סיבה לצאת מהמחשב הזה.</h2>
+    <p>אין חשבון, אין מפתח API, ואין שרת ש-Scriptly PC פונה אליו כברירת מחדל. גם מודל התמלול וגם הסיכום רצים כתהליכים מקומיים על המכונה שלכם — כיבוי ה-Wi-Fi לא שובר כלום.</p>
+    <ul>
+      <li>תמלול: הסקה מקומית על ה-GPU, לא קריאת API</li>
+      <li>סיכום: מודל Ollama מקומי על <span class="mono">localhost</span></li>
+      <li>בדיקה מובנית מתריעה אם תיקיית ההקלטות שלכם יושבת בתוך OneDrive או Dropbox</li>
+      <li>החריג היחיד וה-opt-in: חברו את Google בהגדרות, ואז טקסט של משימה בודדת — לעולם לא התמליל — יכול להישלח ל-Tasks או ליומן, קליק אחד בכל פעם</li>
+    </ul>
+  </div>
+  <figure class="diagram">
+    <svg viewBox="0 0 460 300" role="img" aria-label="תרשים המראה מיקרופון, תמלול וסיכום כולם בתוך גבול המסומן המחשב הזה, עם חץ מקווקו ומסומן X לכיוון האינטרנט המראה ש-0 בייטים יוצאים מהמכונה.">
+      <defs>
+        <marker id="arrow-he-2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect x="20" y="20" width="420" height="220" rx="16" fill="none" stroke="var(--line)" stroke-width="1.4"/>
+      <text x="424" y="44" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" fill="var(--ink-soft)">המחשב הזה</text>
+
+      <g font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="12.5">
+        <rect x="44" y="66" width="120" height="46" rx="9" fill="var(--paper-raised)" stroke="var(--line)"/>
+        <text x="104" y="94" text-anchor="middle" fill="var(--ink)">מיקרופון</text>
+
+        <rect x="44" y="128" width="120" height="46" rx="9" fill="var(--paper-raised)" stroke="var(--line)"/>
+        <text x="104" y="156" text-anchor="middle" fill="var(--ink)">רמקולים</text>
+
+        <rect x="196" y="96" width="120" height="46" rx="9" fill="var(--navy)"/>
+        <text x="256" y="124" text-anchor="middle" fill="#fff">Whisper</text>
+
+        <rect x="196" y="158" width="120" height="46" rx="9" fill="var(--navy)"/>
+        <text x="256" y="186" text-anchor="middle" fill="#fff">Ollama</text>
+
+        <rect x="348" y="127" width="80" height="46" rx="9" fill="var(--teal)"/>
+        <text x="388" y="155" text-anchor="middle" fill="#04211f">דשבורד</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1.3" fill="none" opacity=".7">
+        <line x1="164" y1="89" x2="196" y2="115" marker-end="url(#arrow-he-2)"/>
+        <line x1="164" y1="151" x2="196" y2="125" marker-end="url(#arrow-he-2)"/>
+        <line x1="256" y1="142" x2="256" y2="158" marker-end="url(#arrow-he-2)"/>
+        <line x1="316" y1="180" x2="348" y2="158" marker-end="url(#arrow-he-2)"/>
+      </g>
+
+      <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--coral)">
+        <line x1="388" y1="127" x2="388" y2="70" stroke="var(--coral)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <line x1="374" y1="84" x2="402" y2="56" stroke="var(--coral)" stroke-width="2"/>
+        <line x1="374" y1="56" x2="402" y2="84" stroke="var(--coral)" stroke-width="2"/>
+        <text x="388" y="46" text-anchor="middle">0 בייטים לאינטרנט</text>
+      </g>
+    </svg>
+    <figcaption>כל רכיב בנתיב — לכידה, תמלול, סיכום, אחסון — יושב בתוך אותה מכונה.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="tech-he">
+  <div class="section-head">
+    <h2>מתחת למכסה המנוע</h2>
+    <p>לסקרנים: בדיוק מה רץ, ומה זה דורש.</p>
+  </div>
+  <div class="techgrid">
+    <div class="cell"><span class="k">מודל זיהוי דיבור</span><span class="v">ivrit-ai/whisper-large-v3-turbo-ct2</span></div>
+    <div class="cell"><span class="k">מנוע הסקה</span><span class="v">faster-whisper (CTranslate2, CUDA)</span></div>
+    <div class="cell"><span class="k">מסכם</span><span class="v">aya-expanse:8b דרך Ollama</span></div>
+    <div class="cell"><span class="k">ממשק</span><span class="v">CustomTkinter, בהיר/כהה</span></div>
+    <div class="cell"><span class="k">מערכת הפעלה</span><span class="v">Windows 10 / 11</span></div>
+    <div class="cell"><span class="k">GPU מומלץ</span><span class="v">8GB VRAM (נבדק על RTX 4060)</span></div>
+    <div class="cell"><span class="k">דיסק למודלים</span><span class="v">כ-7GB, מורדים פעם אחת</span></div>
+    <div class="cell"><span class="k">חיבור רשת נדרש</span><span class="v">ללא, לאחר ההתקנה</span></div>
+  </div>
+</section>
+
+<section class="wrap" id="download-he">
+  <div class="section-head">
+    <h2>הורדת Scriptly PC</h2>
+    <p>מתקין אחד, הכל כלול. בלי חשבון, בלי מנוי, בלי תלות בענן.</p>
+  </div>
+  <div class="downloadbox">
+    <a class="dlbtn" href="../Scriptly-PC-Setup-0.12.0.exe" download>⬇ הורדה ל-Windows <span class="size">גרסה 0.12.0 · 952MB</span></a>
+    <div class="dlmeta">
+      <span>Windows 10 / 11 · 64-bit</span>
+      <span>מומלץ GPU של NVIDIA (8GB VRAM ומעלה)</span>
+      <span>חינמי — בלי צורך בחשבון</span>
+    </div>
+    <p class="dlnote">המתקין כולל את האפליקציה עצמה; בהרצה הראשונה הוא מוריד את מודלי Whisper ו-Ollama (כ-7GB) פעם אחת, דרך החיבור שלכם. אחרי זה, Scriptly PC לא צריך אינטרנט שוב לעולם.</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="footrow">
+    <span class="brand" style="display:flex;align-items:center;gap:8px;">
+      <svg viewBox="0 0 64 64" width="20" height="20" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="var(--navy)"/>
+        <g fill="var(--teal-bright)">
+          <rect x="14" y="26" width="4" height="12" rx="2"/><rect x="21" y="20" width="4" height="24" rx="2"/>
+          <rect x="28" y="14" width="4" height="36" rx="2"/><rect x="35" y="22" width="4" height="20" rx="2"/>
+          <rect x="42" y="27" width="4" height="10" rx="2"/>
+        </g>
+      </svg>
+      Scriptly PC
+    </span>
+    <span class="fine">גרסה 0.12.0 · מקליט, מתמלל, מסכם — נשאר על המכונה הזו אלא אם ביקשתם אחרת</span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  function setSiteLang(lang){
+    var html = document.documentElement;
+    html.setAttribute('data-lang', lang);
+    html.setAttribute('lang', lang === 'he' ? 'he' : 'en');
+    html.setAttribute('dir', lang === 'he' ? 'rtl' : 'ltr');
+    try { localStorage.setItem('scriptly_site_lang', lang); } catch(e){}
+  }
+  window.setSiteLang = setSiteLang;
+  var saved = null;
+  try { saved = localStorage.getItem('scriptly_site_lang'); } catch(e){}
+  setSiteLang(saved === 'he' ? 'he' : 'en');
+})();
+</script>
+
+</body>
+</html>
