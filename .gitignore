@@ -25,3 +25,8 @@ Meetings/
 
 # Local tooling state, not part of the shipped product
 .claude/
+SPEC.md
+CHANGELOG.md
+PROJECT.md
+RELEASE-CHECKLIST.md
+DELETIONS.md
