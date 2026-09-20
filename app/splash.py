@@ -67,6 +67,9 @@ class SplashScreen:
 
         tk.Label(container, text=t("copyright_line"), font=("Segoe UI", 8), bg=BG, fg=TEXT_SOFT).pack(side="bottom", pady=(0, 10))
 
+        self._fade_in_after_id = None
+        self._progress_after_id = None
+
         self._fade_in()
         self._animate_progress(0)
         self.root.update()
@@ -78,15 +81,15 @@ class SplashScreen:
         except tk.TclError:
             return
         if alpha < 1.0:
-            self.root.after(15, lambda: self._fade_in(alpha))
+            self._fade_in_after_id = self.root.after(15, lambda: self._fade_in(alpha))
 
     def _animate_progress(self, width):
         width = min(width + 4, 280)
         self._progress_canvas.coords(self._progress_bar, 0, 0, width, 4)
         if width < 280:
-            self.root.after(25, lambda: self._animate_progress(width))
+            self._progress_after_id = self.root.after(25, lambda: self._animate_progress(width))
         else:
-            self.root.after(10, lambda: self._animate_progress(0))
+            self._progress_after_id = self.root.after(10, lambda: self._animate_progress(0))
 
     def set_status(self, text: str) -> None:
         try:
@@ -100,6 +103,12 @@ class SplashScreen:
         remaining = _MIN_DISPLAY_SECONDS - elapsed
         if remaining > 0:
             time.sleep(remaining)
+        for after_id in (self._fade_in_after_id, self._progress_after_id):
+            if after_id is not None:
+                try:
+                    self.root.after_cancel(after_id)
+                except tk.TclError:
+                    pass
         try:
             self.root.destroy()
         except tk.TclError:

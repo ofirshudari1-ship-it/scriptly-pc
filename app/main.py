@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-from . import i18n
+from . import autostart, i18n
 from .config import load_config
 from .controller import AppController
 from .dashboard import Dashboard
@@ -88,6 +88,15 @@ def main():
     root = ctk.CTk()
     dashboard = Dashboard(root, controller)
     overlay = RecordingOverlay(root, controller)
+
+    # "--minimized" is only ever appended by our own Windows-startup Run-key entry
+    # (app/autostart.py) when the user opted into "start minimized on login" in
+    # Settings - never present on a manual launch (Start Menu/desktop shortcut),
+    # so this never overrides the "first launch = visible window" default
+    # (STANDARDS.md 12.1). It still shows the one-time tray background notice via
+    # dashboard.hide(), so the user isn't left wondering where the window went.
+    if autostart.MINIMIZED_FLAG in sys.argv[1:]:
+        root.after(0, dashboard.hide)
 
     def quit_everything():
         try:

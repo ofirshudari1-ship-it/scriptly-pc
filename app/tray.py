@@ -65,20 +65,40 @@ class TrayIcon:
     def _quit(self, icon=None, item=None):
         self.on_quit()
 
+    def _recording_notifications_enabled(self) -> bool:
+        """Governs only the recording start/stop/auto-processing-done balloons (that's what
+        "Show desktop notifications after recording & processing" in Settings actually says it
+        controls) - never errors or the one-time "still running in the background" notice, which
+        are safety/orientation messages, not routine recording-workflow noise."""
+        return self.controller.config.get("notification_enabled", True)
+
+    def _recording_style(self) -> str:
+        """"off" | "minimal" | "verbose" - see config.DEFAULTS["recording_notification_style"]."""
+        return self.controller.config.get("recording_notification_style", "minimal")
+
     def _on_event(self, event, payload):
         try:
             if event == "recording_started":
                 self.icon.icon = self.icon_recording
                 self.icon.title = f"{t('app_title')} - {t('status_recording')}"
-                self.icon.notify(t("status_recording"), t("app_title"))
+                if self._recording_notifications_enabled() and self._recording_style() == "verbose":
+                    self.icon.notify(t("status_recording"), t("app_title"))
             elif event == "recording_stopped":
                 self.icon.icon = self.icon_idle
                 self.icon.title = f"{t('app_title')} - {t('status_ready')}"
+                if self._recording_notifications_enabled() and self._recording_style() in ("minimal", "verbose"):
+                    self.icon.notify(t("status_ready"), t("app_title"))
             elif event == "processing_done":
-                self.icon.notify(t("processing_done_msg"), t("app_title"))
+                if self._recording_notifications_enabled() and self._recording_style() in ("minimal", "verbose"):
+                    self.icon.notify(t("processing_done_msg"), t("app_title"))
             elif event == "error":
+                # Always shown regardless of the recording-notifications toggle - an error is
+                # actionable information, not routine start/stop/done noise.
                 self.icon.notify(payload.get("message", "Error"), t("app_title"))
             elif event == "tray_background_notice":
+                # Always shown (one-time only, see dashboard.hide()) - STANDARDS.md 12.1 requires
+                # this explanation regardless of notification preferences, or users conclude the
+                # app quit instead of realizing it's still running in the background.
                 self.icon.notify(payload.get("message", t("tray_background_notice")), t("app_title"))
         except Exception:
             logger.exception("tray event handling failed for %s", event)

@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from . import audio_devices, audio_player, autostart, diagnostics, google_integration, i18n
+from . import audio_devices, audio_player, autostart, diagnostics, google_integration, hotkey_conflicts, i18n
 from .config import BUILD_DATE, PROJECT_ROOT, RESOURCE_ROOT, VERSION, save_config
 from .export import DIGEST_EXPORT_EXTENSIONS, EXPORT_EXTENSIONS, export_digest, export_meeting, export_meeting_srt
 from .i18n import t
@@ -91,6 +91,10 @@ class Dashboard:
         root.title(f"{t('app_title')} v{VERSION}")
         root.geometry(self._restorable_geometry())
         root.minsize(860, 520)
+        if controller.config.get("window_maximized", False):
+            # Deferred to after the window exists/has its geometry applied - calling
+            # state("zoomed") before that is unreliable on Windows/Tk.
+            root.after(0, lambda: root.state("zoomed"))
         root.configure(fg_color=C["bg"])
         try:
             root.iconbitmap(str(ASSETS_DIR / "icon_idle.ico"))
@@ -152,8 +156,18 @@ class Dashboard:
 
     def _save_geometry(self):
         self._geometry_save_after_id = None
-        if self.root.state() != "normal":
-            return  # don't persist a maximized/withdrawn geometry string
+        state = self.root.state()
+        if state == "zoomed":
+            # Maximized/Normal is itself part of what STANDARDS.md 12.3 asks to persist -
+            # keep the last known *normal* geometry untouched (so un-maximizing later
+            # restores a sane size) and just flag that we should re-maximize on next launch.
+            if not self.controller.config.get("window_maximized", False):
+                self.controller.config["window_maximized"] = True
+                save_config(self.controller.config)
+            return
+        if state != "normal":
+            return  # withdrawn/iconic - nothing meaningful to persist
+        self.controller.config["window_maximized"] = False
         self.controller.config["window_geometry"] = self.root.geometry()
         save_config(self.controller.config)
 
@@ -1454,6 +1468,12 @@ class Dashboard:
         )
         add_help(sec_ui, t("help_autostart"))
 
+        start_min_var = tk.BooleanVar(value=config.get("start_minimized_on_login", False))
+        ctk.CTkCheckBox(sec_ui, text=t("settings_start_minimized_login"), variable=start_min_var).pack(
+            anchor=anchor, padx=16, pady=(8, 0)
+        )
+        add_help(sec_ui, t("help_start_minimized_login"))
+
         floating_var = tk.BooleanVar(value=config.get("floating_launcher", True))
         ctk.CTkCheckBox(sec_ui, text=t("settings_floating_launcher"), variable=floating_var).pack(
             anchor=anchor, padx=16, pady=(8, 0)
@@ -1482,6 +1502,21 @@ class Dashboard:
             anchor=anchor, padx=16, pady=(4, 0)
         )
         add_help(sec_storage, t("settings_notifications_enabled_help"))
+
+        notif_style_display = {
+            "verbose": t("notification_style_verbose"),
+            "minimal": t("notification_style_minimal"),
+            "off": t("notification_style_off"),
+        }
+        notif_style_reverse = {v: k for k, v in notif_style_display.items()}
+        notif_style_var = tk.StringVar(
+            value=notif_style_display.get(config.get("recording_notification_style", "minimal"), notif_style_display["minimal"])
+        )
+        add_row(
+            sec_storage, t("settings_notification_style"),
+            ctk.CTkOptionMenu(sec_storage, values=list(notif_style_display.values()), variable=notif_style_var),
+            t("help_notification_style"),
+        )
 
         auto_save_var = tk.BooleanVar(value=config.get("auto_save_recordings", True))
         ctk.CTkCheckBox(sec_storage, text=t("settings_auto_save_recordings"), variable=auto_save_var).pack(
@@ -1599,7 +1634,14 @@ class Dashboard:
             old_hotkey = self.controller.config["hotkey"]
             old_ui_lang = config.get("ui_language", "en")
 
-            config["hotkey"] = hotkey_var.get().strip() or config["hotkey"]
+            new_hotkey = hotkey_var.get().strip() or config["hotkey"]
+            if new_hotkey != old_hotkey:
+                conflict = hotkey_conflicts.find_conflict(new_hotkey)
+                if conflict and not messagebox.askyesno(
+                    t("app_title"), t("hotkey_conflict_warning", hotkey=new_hotkey, conflict=conflict)
+                ):
+                    new_hotkey = old_hotkey  # user declined - keep the previous hotkey, still save everything else
+            config["hotkey"] = new_hotkey
             config["meetings_dir"] = dir_var.get().strip() or config["meetings_dir"]
             config["keep_audio"] = bool(keep_audio_var.get())
             config["auto_summarize"] = bool(auto_summarize_var.get())
@@ -1628,13 +1670,15 @@ class Dashboard:
             config["ui_language"] = lang_reverse.get(lang_var.get(), "en")
             config["appearance_mode"] = appearance_reverse.get(appearance_var.get(), "system")
             config["notification_enabled"] = bool(notification_var.get())
+            config["recording_notification_style"] = notif_style_reverse.get(notif_style_var.get(), "minimal")
             config["auto_save_recordings"] = bool(auto_save_var.get())
             config["check_for_updates_enabled"] = bool(check_updates_var.get())
             config["export_format"] = export_reverse.get(export_var.get(), "docx")
+            config["start_minimized_on_login"] = bool(start_min_var.get())
             old_scale = config.get("ui_scale", 1.0)
             config["ui_scale"] = scale_reverse.get(scale_var.get(), 1.0)
             save_config(config)
-            autostart.set_enabled(bool(autostart_var.get()))
+            autostart.set_enabled(bool(autostart_var.get()), minimized=bool(start_min_var.get()))
             self.controller.reload_config()
             if config["ui_scale"] != old_scale:
                 ctk.set_widget_scaling(config["ui_scale"])
@@ -1690,9 +1734,7 @@ class Dashboard:
         if self._geometry_save_after_id:
             self.root.after_cancel(self._geometry_save_after_id)
             self._geometry_save_after_id = None
-        if self.root.state() == "normal":
-            self.controller.config["window_geometry"] = self.root.geometry()
-            save_config(self.controller.config)
+        self._save_geometry()
 
     def hide(self):
         self._flush_geometry()

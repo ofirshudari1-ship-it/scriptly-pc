@@ -346,5 +346,75 @@ class TestUpdateChecker(unittest.TestCase):
         self.assertFalse(is_newer("v0.13.99", "0.14.0"))
 
 
+class TestHotkeyConflicts(unittest.TestCase):
+    """app/hotkey_conflicts.py - STANDARDS.md 12.4: warn (don't block) when the user
+    picks a hotkey that collides with a well-known Windows/OBS/Discord shortcut."""
+
+    def test_known_windows_shortcut_flagged(self):
+        from app.hotkey_conflicts import find_conflict
+
+        self.assertIsNotNone(find_conflict("win+l"))
+        self.assertIn("Lock", find_conflict("win+l"))
+
+    def test_case_and_spacing_insensitive(self):
+        from app.hotkey_conflicts import find_conflict
+
+        self.assertEqual(find_conflict("Win + L"), find_conflict("win+l"))
+        self.assertEqual(find_conflict(" WIN+L "), find_conflict("win+l"))
+
+    def test_common_obs_and_discord_bindings_flagged(self):
+        from app.hotkey_conflicts import find_conflict
+
+        self.assertIsNotNone(find_conflict("ctrl+shift+r"))  # OBS record
+        self.assertIsNotNone(find_conflict("ctrl+shift+m"))  # Discord mute
+
+    def test_default_app_hotkey_has_no_conflict(self):
+        from app.hotkey_conflicts import find_conflict
+
+        self.assertIsNone(find_conflict("ctrl+alt+m"))
+
+    def test_empty_string_has_no_conflict(self):
+        from app.hotkey_conflicts import find_conflict
+
+        self.assertIsNone(find_conflict(""))
+
+
+class TestAutostart(unittest.TestCase):
+    """app/autostart.py - registry Run-key command building (no actual registry I/O;
+    is_enabled()/set_enabled() themselves are thin winreg wrappers not worth mocking here)."""
+
+    def test_launch_command_minimized_appends_flag(self):
+        from app.autostart import MINIMIZED_FLAG, _launch_command
+
+        self.assertNotIn(MINIMIZED_FLAG, _launch_command(minimized=False))
+        self.assertIn(MINIMIZED_FLAG, _launch_command(minimized=True))
+
+    def test_launch_command_default_not_minimized(self):
+        from app.autostart import MINIMIZED_FLAG, _launch_command
+
+        self.assertNotIn(MINIMIZED_FLAG, _launch_command())
+
+
+class TestNewConfigDefaults(unittest.TestCase):
+    """Regression guard for the STANDARDS.md 12 fixes: window-maximized persistence,
+    start-minimized-on-login, and recording notification style must all ship with
+    safe, explicit defaults - never silently None or missing."""
+
+    def test_start_minimized_on_login_defaults_off(self):
+        from app.config import DEFAULTS
+
+        self.assertFalse(DEFAULTS["start_minimized_on_login"])
+
+    def test_window_maximized_defaults_false(self):
+        from app.config import DEFAULTS
+
+        self.assertFalse(DEFAULTS["window_maximized"])
+
+    def test_recording_notification_style_defaults_to_minimal(self):
+        from app.config import DEFAULTS
+
+        self.assertEqual(DEFAULTS["recording_notification_style"], "minimal")
+
+
 if __name__ == "__main__":
     unittest.main()
