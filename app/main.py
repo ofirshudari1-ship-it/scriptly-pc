@@ -86,6 +86,11 @@ def main():
     splash.close()
 
     root = ctk.CTk()
+    # STANDARDS.md §19.3: the main window must be created hidden and only
+    # shown once its content is actually built - otherwise Tk maps the
+    # window immediately on creation and the user sees a blank/gray frame
+    # flash before Dashboard finishes laying out its widgets.
+    root.withdraw()
     dashboard = Dashboard(root, controller)
     overlay = RecordingOverlay(root, controller)
 
@@ -95,8 +100,13 @@ def main():
     # so this never overrides the "first launch = visible window" default
     # (STANDARDS.md 12.1). It still shows the one-time tray background notice via
     # dashboard.hide(), so the user isn't left wondering where the window went.
-    if autostart.MINIMIZED_FLAG in sys.argv[1:]:
+    # Skip the deiconify below in that case so the window never flashes visible
+    # for a frame before immediately being withdrawn again.
+    start_minimized = autostart.MINIMIZED_FLAG in sys.argv[1:]
+    if start_minimized:
         root.after(0, dashboard.hide)
+    else:
+        root.deiconify()
 
     def quit_everything():
         try:
