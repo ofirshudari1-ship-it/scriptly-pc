@@ -874,22 +874,43 @@ class Dashboard:
         trend = compute_daily_trend(meetings, days=14)
         trend_card = ctk.CTkFrame(body, fg_color=C["card"], corner_radius=10, border_width=1, border_color=C["border"])
         trend_card.pack(fill="x")
-        canvas_w, canvas_h, pad = 380, 90, 6
+        # tk.Canvas is a raw Tk widget, not a CTk one - CustomTkinter's automatic
+        # DPI/ui_scale widget scaling (ctk.set_widget_scaling(), and the per-monitor
+        # DPI detection in main._set_dpi_awareness()) never touches it. Left as literal
+        # pixel constants, this chart used to stay a fixed ~380px wide while the rest of
+        # this scrollable dialog (all CTk widgets) grew with display scaling - at 150%/
+        # 200% Windows scaling the bars ended up squeezed into a narrow strip with a big
+        # empty gap next to them. Scale every pixel constant and font size by the same
+        # factor CTk applies to its own widgets so the chart grows in step with the card
+        # around it.
+        scale = ctk.ScalingTracker.get_widget_scaling(self.root)
+        canvas_w, canvas_h, pad = round(380 * scale), round(90 * scale), round(6 * scale)
+        chart_font_size = max(7, round(8 * scale))
         card_bg, teal_c, soft_c, border_c = self._color("card"), self._color("teal"), self._color("text_soft"), self._color("border")
         canvas = tk.Canvas(trend_card, width=canvas_w, height=canvas_h, bg=card_bg, highlightthickness=0)
         canvas.pack(padx=12, pady=(12, 4))
         max_v = max(trend) or 1
         bar_w = (canvas_w - 2 * pad) / len(trend)
+        axis_gap = round(18 * scale)
         for i, v in enumerate(trend):
             x0 = pad + i * bar_w + 2
             x1 = pad + (i + 1) * bar_w - 2
-            bar_h = (canvas_h - 20) * (v / max_v)
-            canvas.create_rectangle(x0, canvas_h - 18 - bar_h, x1, canvas_h - 18, fill=teal_c, outline="")
+            bar_h = (canvas_h - round(20 * scale)) * (v / max_v)
+            canvas.create_rectangle(x0, canvas_h - axis_gap - bar_h, x1, canvas_h - axis_gap, fill=teal_c, outline="")
             if v:
-                canvas.create_text((x0 + x1) / 2, canvas_h - 18 - bar_h - 8, text=str(v), fill=soft_c, font=(FONT, 8))
-        canvas.create_line(pad, canvas_h - 18, canvas_w - pad, canvas_h - 18, fill=border_c)
-        canvas.create_text(pad + 4, canvas_h - 8, text=t("stats_trend_start"), fill=soft_c, font=(FONT, 8), anchor="w")
-        canvas.create_text(canvas_w - pad - 4, canvas_h - 8, text=t("stats_trend_end"), fill=soft_c, font=(FONT, 8), anchor="e")
+                canvas.create_text(
+                    (x0 + x1) / 2, canvas_h - axis_gap - bar_h - round(8 * scale), text=str(v), fill=soft_c,
+                    font=(FONT, chart_font_size),
+                )
+        canvas.create_line(pad, canvas_h - axis_gap, canvas_w - pad, canvas_h - axis_gap, fill=border_c)
+        canvas.create_text(
+            pad + 4, canvas_h - round(8 * scale), text=t("stats_trend_start"), fill=soft_c,
+            font=(FONT, chart_font_size), anchor="w",
+        )
+        canvas.create_text(
+            canvas_w - pad - 4, canvas_h - round(8 * scale), text=t("stats_trend_end"), fill=soft_c,
+            font=(FONT, chart_font_size), anchor="e",
+        )
         ctk.CTkFrame(trend_card, fg_color="transparent", height=4).pack()
 
         # --- יחס דיבור ---
