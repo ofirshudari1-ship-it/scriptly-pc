@@ -7,6 +7,7 @@
   "already_running": "Scriptly PC כבר רץ ברקע - חפשו את האייקון ליד השעון (יתכן שהוא מוסתר באייקונים החבויים).",
   "app_title": "Scriptly PC",
   "badge_likely_noise": "🔇 כנראה רעש רקע",
+  "cumulative_stat": "{count} הקלטות · סה\"כ {time} הוקלטו",
   "recording_size_limit_banner": "ההקלטה נעצרה אוטומטית ונשמרה אחרי שהגיעה למגבלת הגודל שהוגדרה בהגדרות - אפשר להגדיל אותה אם צריך הקלטות ארוכות יותר.",
   "btn_copy": "📋 העתקה",
   "filter_hide_noise": "הסתר הקלטות שכנראה רעש/שקט",

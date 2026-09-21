@@ -7,6 +7,7 @@
   "already_running": "Scriptly PC is already running in the background - look for its icon near the clock (it may be hidden in the overflow tray icons).",
   "app_title": "Scriptly PC",
   "badge_likely_noise": "🔇 Probably background noise",
+  "cumulative_stat": "{count} recordings · {time} recorded in total",
   "recording_size_limit_banner": "Recording auto-stopped and saved after reaching the size limit set in Settings - turn it up if you need longer recordings.",
   "btn_copy": "📋 Copy",
   "filter_hide_noise": "Hide probable noise/silence recordings",

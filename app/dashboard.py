@@ -70,6 +70,81 @@ def _img(name, size):
     return ctk.CTkImage(Image.open(ASSETS_DIR / name), size=size)
 
 
+def _bind_esc_close(dialog):
+    """Esc dismisses any dialog/popup (STANDARDS.md 18.2) - grab_set() alone traps a
+    keyboard-only user with no way out short of clicking a specific button."""
+    dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+
+def _apply_keyboard_focus(container):
+    """Recursively makes every CTkButton/CTkCheckBox under `container` reachable by Tab,
+    activatable with Enter/Space, and gives it a visible focus ring (STANDARDS.md 18.2).
+
+    CustomTkinter's CTkButton/CTkCheckBox are Frame-based canvas widgets - unlike
+    CTkEntry/CTkOptionMenu (which wrap a real Tk Entry), they never join Tk's Tab
+    traversal chain and draw no focus indicator at all, so without this a mouse-only
+    user can operate the app but a keyboard-only one cannot reach most controls.
+    """
+    stack = [container]
+    while stack:
+        widget = stack.pop()
+        try:
+            stack.extend(widget.winfo_children())
+        except Exception:
+            pass
+        if not isinstance(widget, (ctk.CTkButton, ctk.CTkCheckBox)) or getattr(widget, "_scriptly_focusable", False):
+            continue
+        widget._scriptly_focusable = True
+        try:
+            widget.tk.call(widget._w, "configure", "-takefocus", "1")
+        except Exception:
+            continue
+        try:
+            base_border_width = widget.cget("border_width")
+            base_border_color = widget.cget("border_color")
+        except Exception:
+            base_border_width, base_border_color = 0, None
+
+        def _on_focus_in(_e=None, w=widget):
+            try:
+                w.configure(border_width=2, border_color=C["teal"])
+            except Exception:
+                pass
+
+        def _on_focus_out(_e=None, w=widget, bw=base_border_width, bc=base_border_color):
+            try:
+                w.configure(border_width=bw, border_color=bc)
+            except Exception:
+                pass
+
+        def _on_activate(_e=None, w=widget):
+            if isinstance(w, ctk.CTkCheckBox):
+                w.toggle()
+            else:
+                w.invoke()
+
+        widget.bind("<FocusIn>", _on_focus_in, add="+")
+        widget.bind("<FocusOut>", _on_focus_out, add="+")
+        widget.bind("<Return>", _on_activate, add="+")
+        widget.bind("<space>", _on_activate, add="+")
+
+
+def _mirror_scrollbar_if_rtl(scrollable_frame):
+    """CTkScrollableFrame always docks its scrollbar on the right edge - Tk has no
+    built-in RTL awareness (see i18n.py's module docstring). STANDARDS.md 18.1 requires
+    the scrollbar to move to the left edge in RTL, matching how Windows' own RTL apps
+    behave, so this swaps the canvas/scrollbar columns after construction."""
+    if not i18n.is_rtl():
+        return
+    try:
+        scrollable_frame._parent_frame.grid_columnconfigure(0, weight=0)
+        scrollable_frame._parent_frame.grid_columnconfigure(1, weight=1)
+        scrollable_frame._parent_canvas.grid_configure(column=1)
+        scrollable_frame._scrollbar.grid_configure(column=0)
+    except Exception:
+        logger.debug("could not mirror scrollbar for RTL", exc_info=True)
+
+
 class Dashboard:
     def __init__(self, root: ctk.CTk, controller):
         self.root = root
@@ -83,6 +158,7 @@ class Dashboard:
         self._playing_dir = None
         self._play_after_id = None
         self._geometry_save_after_id = None
+        self._banner_clear_after_id = None
 
         i18n.set_language(controller.config.get("ui_language", "en"))
         ctk.set_appearance_mode(controller.config.get("appearance_mode", "system"))
@@ -277,6 +353,15 @@ class Dashboard:
             anchor=self._anchor(),
         ).pack(fill="x", padx=16, pady=(16, 8))
 
+        # Cumulative real stat, extending the same "progress visibility" pattern already
+        # used in the Stats dialog (STANDARDS.md 18.4) - a real accumulated number the app
+        # already tracks (compute_stats), never a fabricated metric. Filled in by
+        # refresh_meetings() once meeting data is loaded.
+        self.cumulative_stat_label = ctk.CTkLabel(
+            left, text="", font=ctk.CTkFont(family=FONT, size=11), text_color=C["teal_text"], anchor=self._anchor(),
+        )
+        self.cumulative_stat_label.pack(fill="x", padx=16, pady=(0, 8))
+
         self.search_var = tk.StringVar(value="")
         self.search_var.trace_add("write", lambda *a: self._render_meeting_list())
         search_entry = ctk.CTkEntry(
@@ -296,6 +381,17 @@ class Dashboard:
 
         self.meetings_scroll = ctk.CTkScrollableFrame(left, fg_color="transparent")
         self.meetings_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 10))
+        _mirror_scrollbar_if_rtl(self.meetings_scroll)
+        # Recording rows are plain CTkFrame/CTkLabel (mouse-only <Button-1> binds) - give
+        # the list itself keyboard reachability with Up/Down to move the selection and
+        # Enter to keep it, so the whole recordings list is usable without a mouse
+        # (STANDARDS.md 18.2).
+        try:
+            self.meetings_scroll.tk.call(self.meetings_scroll._w, "configure", "-takefocus", "1")
+        except Exception:
+            pass
+        self.meetings_scroll.bind("<Up>", lambda e: self._move_selection(-1))
+        self.meetings_scroll.bind("<Down>", lambda e: self._move_selection(1))
 
         right = ctk.CTkFrame(body, fg_color=C["card"], corner_radius=14, border_width=1, border_color=C["border"])
         right.grid(row=0, column=right_col, sticky="nsew")
@@ -389,6 +485,8 @@ class Dashboard:
         self.text.tag_configure("header", font=(FONT, 13, "bold"), spacing3=6, foreground=header_fg)
         self.text.tag_configure("bold", font=(FONT, 11, "bold"))
 
+        _apply_keyboard_focus(self.container)
+
     def _text_colors(self):
         if self._is_dark():
             return "#1b1f29", "#e9edf5", "#5fd6cd"
@@ -409,7 +507,22 @@ class Dashboard:
 
     def refresh_meetings(self, select_dir: Path = None):
         self._meetings_all = list_meetings(self.controller.meetings_dir)
+        self._update_cumulative_stat()
         self._render_meeting_list(select_dir)
+
+    def _update_cumulative_stat(self):
+        """Real, already-tracked cumulative number (STANDARDS.md 18.4 "progress
+        visibility") shown right on the main screen, not buried in the Stats dialog -
+        same compute_stats() the Stats dialog itself uses, never a fabricated metric."""
+        if not hasattr(self, "cumulative_stat_label"):
+            return
+        s = compute_stats(self._meetings_all)
+        if not s["total"]:
+            self.cumulative_stat_label.configure(text="")
+            return
+        self.cumulative_stat_label.configure(
+            text="🎙 " + t("cumulative_stat", count=s["total"], time=format_duration(s["total_seconds"]))
+        )
 
     def _on_toggle_hide_noise(self):
         self.controller.config["hide_noise_recordings"] = bool(self.hide_noise_var.get())
@@ -565,6 +678,19 @@ class Dashboard:
             return
         row.configure(fg_color=C["card_hover"] if entering else C["card"])
 
+    def _move_selection(self, delta):
+        """Up/Down keyboard navigation over the recordings list (STANDARDS.md 18.2)."""
+        if not self._meetings:
+            return "break"
+        current = self._selected_index if self._selected_index is not None else 0
+        new_index = max(0, min(len(self._meetings) - 1, current + delta))
+        self._select_meeting(new_index)
+        try:
+            self._row_widgets[new_index].winfo_toplevel().update_idletasks()
+        except Exception:
+            pass
+        return "break"
+
     def _select_meeting(self, index):
         if index is None or index >= len(self._meetings):
             return
@@ -664,13 +790,27 @@ class Dashboard:
             self._play_after_id = None
         self._playing_dir = None
 
+    def _flash_banner(self, text, color, duration_ms=3500):
+        """Transient success-feedback toast (STANDARDS.md 18.5) - immediate confirmation
+        after an action truly completes, that then clears itself instead of sitting there
+        indefinitely until some unrelated later event happens to overwrite it."""
+        self.banner.configure(text=text, text_color=color)
+        if self._banner_clear_after_id is not None:
+            self.root.after_cancel(self._banner_clear_after_id)
+        self._banner_clear_after_id = self.root.after(duration_ms, self._clear_banner_if_unchanged, text)
+
+    def _clear_banner_if_unchanged(self, expected_text):
+        self._banner_clear_after_id = None
+        if self.banner.cget("text") == expected_text:
+            self.banner.configure(text="")
+
     def _copy_selected(self):
         content = self.text.get("1.0", "end-1c")
         if not content.strip():
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(content)
-        self.banner.configure(text=t("copied_toast"), text_color=C["green"])
+        self._flash_banner(t("copied_toast"), C["green"])
 
     def _export_selected(self):
         meeting = self._selected_meeting()
@@ -689,7 +829,7 @@ class Dashboard:
             return
         try:
             export_meeting(meeting, Path(out_path), fmt)
-            self.banner.configure(text=t("export_done_toast", path=out_path), text_color=C["green"])
+            self._flash_banner(t("export_done_toast", path=out_path), C["green"])
         except Exception as exc:
             logger.exception("export failed")
             self.banner.configure(text=t("export_failed", exc=exc), text_color=C["red_text"])
@@ -710,7 +850,7 @@ class Dashboard:
             return
         try:
             export_meeting_srt(meeting, Path(out_path))
-            self.banner.configure(text=t("export_done_toast", path=out_path), text_color=C["green"])
+            self._flash_banner(t("export_done_toast", path=out_path), C["green"])
         except Exception as exc:
             logger.exception("srt export failed")
             self.banner.configure(text=t("export_failed", exc=exc), text_color=C["red_text"])
@@ -725,6 +865,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
         anchor = self._anchor()
 
         ctk.CTkLabel(dialog, text=t("tags_label"), anchor=anchor, font=ctk.CTkFont(family=FONT, size=12)).pack(
@@ -767,6 +908,7 @@ class Dashboard:
             dialog, text=t("btn_save_meta"), fg_color=C["teal"], hover_color=C["teal_hover"], text_color="#062824",
             command=save,
         ).pack(pady=16)
+        _apply_keyboard_focus(dialog)
 
     def _set_text(self, content: str, markdown: bool = False):
         self.text.configure(state="normal")
@@ -837,6 +979,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
         anchor = self._anchor()
         meetings = self._meetings_all
 
@@ -923,7 +1066,14 @@ class Dashboard:
             bar.pack(fill="x", padx=14, pady=(14, 8))
             bar.pack_propagate(False)
             you_part = ctk.CTkFrame(bar, fg_color=C["teal"], corner_radius=6)
-            you_part.place(relx=0, rely=0, relwidth=max(ratio["you_pct"] / 100, 0.02), relheight=1)
+            you_relwidth = max(ratio["you_pct"] / 100, 0.02)
+            # RTL: the "you" segment's legend chip sits on the right (below), so the
+            # filled portion of the bar itself must also start from the right edge -
+            # otherwise the color and its label point in opposite directions
+            # (STANDARDS.md 18.1 - this is a proportion bar, not a time-progress bar,
+            # but the same "fill follows reading direction" rule applies to it).
+            you_relx = (1 - you_relwidth) if anchor == "e" else 0
+            you_part.place(relx=you_relx, rely=0, relwidth=you_relwidth, relheight=1)
             legend = ctk.CTkFrame(ratio_card, fg_color="transparent")
             legend.pack(fill="x", padx=14, pady=(0, 14))
             ctk.CTkLabel(
@@ -969,6 +1119,9 @@ class Dashboard:
             body, text=s["busiest_day"] or t("stats_none"), text_color=C["text"], font=ctk.CTkFont(family=FONT, size=13), anchor=anchor,
         ).pack(fill="x", padx=4)
 
+        _mirror_scrollbar_if_rtl(body)
+        _apply_keyboard_focus(dialog)
+
     def open_tasks(self):
         dialog = ctk.CTkToplevel(self.root)
         dialog.title(t("tasks_dialog_title"))
@@ -976,6 +1129,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
         anchor = self._anchor()
 
         header_row = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1105,7 +1259,11 @@ class Dashboard:
                 for task in done_tasks:
                     add_row(task)
 
+            _apply_keyboard_focus(scroll)
+
         render()
+        _mirror_scrollbar_if_rtl(scroll)
+        _apply_keyboard_focus(header_row)
 
     def open_digest_export(self):
         dialog = ctk.CTkToplevel(self.root)
@@ -1114,6 +1272,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
         anchor = self._anchor()
 
         ctk.CTkLabel(
@@ -1172,6 +1331,7 @@ class Dashboard:
         ctk.CTkButton(
             dialog, text=t("btn_export"), fg_color=C["teal"], hover_color=C["teal_hover"], text_color="#062824", command=do_export,
         ).pack(pady=16)
+        _apply_keyboard_focus(dialog)
 
     def open_about(self):
         dialog = ctk.CTkToplevel(self.root)
@@ -1180,6 +1340,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
 
         ctk.CTkLabel(dialog, image=self.logo_img, text="").pack(pady=(24, 8))
         ctk.CTkLabel(
@@ -1211,6 +1372,7 @@ class Dashboard:
         ctk.CTkLabel(
             dialog, text=t("copyright_line"), text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=10),
         ).pack(pady=(20, 0), side="bottom")
+        _apply_keyboard_focus(dialog)
 
     def open_diagnostics(self):
         dialog = ctk.CTkToplevel(self.root)
@@ -1219,6 +1381,7 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
 
         ctk.CTkLabel(
             dialog, text=t("diagnostics_intro"), text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=12),
@@ -1251,11 +1414,15 @@ class Dashboard:
                     anchor=self._anchor(), justify=self._justify(), wraplength=440,
                 ).pack(fill="x", padx=14, pady=(0, 10))
 
+            _apply_keyboard_focus(results_frame)
+
         render_results()
+        _mirror_scrollbar_if_rtl(results_frame)
         ctk.CTkButton(
             dialog, text=t("diagnostics_rerun"), fg_color=C["chip_bg"], text_color=C["text"],
             hover_color=C["card_hover"], command=render_results,
         ).pack(pady=(0, 14))
+        _apply_keyboard_focus(dialog)
 
     def open_meetings_folder(self):
         folder = self.controller.meetings_dir
@@ -1300,7 +1467,7 @@ class Dashboard:
             self._processing_dirs.discard(payload.get("meeting_dir"))
             self.status_label.configure(text=t("status_ready"))
             self.status_dot.configure(text_color=C["teal_text"])
-            self.banner.configure(text=t("processing_done_msg"), text_color=C["green"])
+            self._flash_banner(t("processing_done_msg"), C["green"])
             self.refresh_meetings(select_dir=payload.get("meeting_dir"))
             self.show()
         elif event == "meeting_deleted":
@@ -1332,12 +1499,14 @@ class Dashboard:
         dialog.transient(self.root)
         dialog.configure(fg_color=C["bg"])
         dialog.grab_set()
+        _bind_esc_close(dialog)
 
         config = self.controller.config
         anchor = self._anchor()
 
         scroll = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=6, pady=6)
+        _mirror_scrollbar_if_rtl(scroll)
 
         def section(title):
             frame = ctk.CTkFrame(scroll, fg_color=C["card"], corner_radius=12, border_width=1, border_color=C["border"])
@@ -1786,12 +1955,13 @@ class Dashboard:
             else:
                 self.hint_label.configure(text=t("hotkey_hint", hotkey=config["hotkey"]))
                 self.refresh_meetings()
-            self.banner.configure(text=t("settings_saved"), text_color=C["green"])
+            self._flash_banner(t("settings_saved"), C["green"])
 
         ctk.CTkButton(
             dialog, text=t("settings_save"), fg_color=C["teal"], hover_color=C["teal_hover"], text_color="#062824",
             font=ctk.CTkFont(family=FONT, size=13, weight="bold"), height=38, corner_radius=10, command=on_save,
         ).pack(pady=14)
+        _apply_keyboard_focus(dialog)
 
     def _refresh_text_theme(self):
         bg, fg, header_fg = self._text_colors()

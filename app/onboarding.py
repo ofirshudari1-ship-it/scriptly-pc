@@ -10,6 +10,7 @@ import customtkinter as ctk
 
 from . import audio_devices, i18n
 from .config import save_config
+from .dashboard import _apply_keyboard_focus, _mirror_scrollbar_if_rtl
 from .i18n import t
 
 FONT = "Segoe UI"
@@ -50,6 +51,8 @@ class OnboardingDialog:
         self.dialog.bind("<Escape>", lambda e: self._on_done())
 
         self._build_ui()
+        _mirror_scrollbar_if_rtl(self.main)
+        _apply_keyboard_focus(self.dialog)
         self.dialog.wait_window()
 
     def _build_ui(self):
@@ -83,6 +86,13 @@ class OnboardingDialog:
         self.lang_var = tk.StringVar(value=self.config.get("ui_language", "en"))
         for code, name in [("en", "English"), ("he", "עברית (Hebrew)")]:
             self._radio(main, name, self.lang_var, code)
+        # RTL mirroring precision (STANDARDS.md 18.1): self._anchor/_justify were computed
+        # once from the *saved* language at dialog-open time (defaults to "en" on a real
+        # first run, since the language picker above is what lets the user change it) - if
+        # someone picks Hebrew right here, the rest of this screen used to stay LTR-anchored
+        # until after they finished onboarding and the app restarted, so the very moment
+        # someone chooses Hebrew showed it half-mirrored. Live-rebuild on every pick instead.
+        self.lang_var.trace_add("write", self._on_language_preview_changed)
 
         self._section(t("onboarding_section_mic"), t("onboarding_section_mic_sub"))
         try:
@@ -171,6 +181,36 @@ class OnboardingDialog:
             parent, text=text, text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=11),
             anchor=self._anchor, justify=self._justify, wraplength=540,
         ).pack(anchor=self._anchor, fill="x", padx=10, pady=4)
+
+    def _on_language_preview_changed(self, *_args):
+        lang = self.lang_var.get()
+        if lang not in ("en", "he") or lang == i18n.get_language():
+            return  # no-op guard: also prevents the re-trigger below from looping
+
+        # Preserve every other in-progress choice across the rebuild - _build_ui()
+        # recreates all the Variables from scratch (they default to self.config,
+        # not the user's not-yet-saved picks), so capture and restore them.
+        mic_value = self.mic_var.get() if hasattr(self, "mic_var") else None
+        auto_summarize = self.auto_summarize_var.get()
+        ai_titles = self.ai_titles_var.get()
+        floating = self.floating_launcher_var.get()
+        appearance = self.appearance_var.get()
+
+        i18n.set_language(lang)
+        self._anchor = i18n.anchor()
+        self._justify = i18n.justify()
+
+        for child in self.dialog.winfo_children():
+            child.destroy()
+        self._build_ui()
+
+        self.lang_var.set(lang)
+        self.auto_summarize_var.set(auto_summarize)
+        self.ai_titles_var.set(ai_titles)
+        self.floating_launcher_var.set(floating)
+        self.appearance_var.set(appearance)
+        if mic_value is not None and hasattr(self, "mic_var"):
+            self.mic_var.set(mic_value)
 
     def _on_done(self):
         lang = self.lang_var.get()
