@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -344,6 +345,141 @@ class TestUpdateChecker(unittest.TestCase):
         self.assertTrue(is_newer("v1.0.0", "0.99.99"))
         self.assertTrue(is_newer("v0.14.0", "0.13.99"))
         self.assertFalse(is_newer("v0.13.99", "0.14.0"))
+
+    def test_find_installer_asset_picks_the_exe_asset(self):
+        from app.update_checker import _find_installer_asset
+
+        release = {
+            "assets": [
+                {"name": "Scriptly-PC-Setup-0.16.0.exe", "browser_download_url": "https://example/x.exe", "size": 123},
+            ]
+        }
+        asset = _find_installer_asset(release)
+        self.assertEqual(asset, {"name": "Scriptly-PC-Setup-0.16.0.exe", "download_url": "https://example/x.exe", "size": 123})
+
+    def test_find_installer_asset_none_when_no_assets_attached(self):
+        """The actual current state of every Scriptly PC release - the installer
+        exceeds GitHub's 2GB release-asset limit, so releases ship as tag+notes
+        only. This must be detected cleanly (None), not raise or misparse."""
+        from app.update_checker import _find_installer_asset
+
+        self.assertIsNone(_find_installer_asset({"assets": []}))
+        self.assertIsNone(_find_installer_asset({}))
+
+    def test_find_installer_asset_ignores_non_exe_assets(self):
+        from app.update_checker import _find_installer_asset
+
+        release = {"assets": [{"name": "source.zip", "browser_download_url": "https://example/x.zip", "size": 10}]}
+        self.assertIsNone(_find_installer_asset(release))
+
+    def test_check_for_update_sync_reports_no_asset_when_release_has_none(self):
+        """A newer tag exists on GitHub but nothing is attached to download -
+        check_for_update_sync must still report the update (so the tray/manual
+        "check now" UI can say a version is available) with asset=None, not
+        crash or silently treat it as "up to date"."""
+        from app import update_checker
+
+        fake_release = {"tag_name": "v99.0.0", "html_url": "https://github.com/x/releases/tag/v99.0.0", "assets": []}
+        with mock.patch.object(update_checker, "_fetch_latest_release", return_value=fake_release):
+            result = update_checker.check_for_update_sync()
+        self.assertIsNotNone(result)
+        self.assertEqual(result["version"], "99.0.0")
+        self.assertIsNone(result["asset"])
+
+    def test_check_for_update_sync_reports_asset_when_attached(self):
+        from app import update_checker
+
+        fake_release = {
+            "tag_name": "v99.0.0",
+            "html_url": "https://github.com/x/releases/tag/v99.0.0",
+            "assets": [{"name": "Scriptly-PC-Setup-99.0.0.exe", "browser_download_url": "https://dl/x.exe", "size": 42}],
+        }
+        with mock.patch.object(update_checker, "_fetch_latest_release", return_value=fake_release):
+            result = update_checker.check_for_update_sync()
+        self.assertEqual(result["asset"]["download_url"], "https://dl/x.exe")
+
+    def test_perform_self_update_raises_no_asset_hosted_error_gracefully(self):
+        """The core graceful-fallback contract: when GitHub reports a newer
+        release with nothing attached (today's real state - see module
+        docstring on the 2GB hosting gap), perform_self_update must raise the
+        specific NoAssetHostedError with an honest, actionable message instead
+        of attempting a download that would 404, crashing, or pretending it
+        worked."""
+        from app import update_checker
+
+        fake_release = {"tag_name": "v99.0.0", "html_url": "https://github.com/x/releases/tag/v99.0.0", "assets": []}
+        with mock.patch.object(update_checker, "_fetch_latest_release", return_value=fake_release):
+            with self.assertRaises(update_checker.NoAssetHostedError) as ctx:
+                update_checker.perform_self_update()
+        self.assertIn("99.0.0", str(ctx.exception))
+        self.assertIn("github.com", str(ctx.exception))
+
+    def test_perform_self_update_raises_update_error_on_unreachable_api(self):
+        from app import update_checker
+
+        with mock.patch.object(update_checker, "_fetch_latest_release", return_value={}):
+            with self.assertRaises(update_checker.UpdateError):
+                update_checker.perform_self_update()
+
+    def test_download_installer_verifies_size_and_raises_on_mismatch(self):
+        """A download that stops short (truncated/interrupted) must be treated
+        as a failure - never silently accepted as a complete installer."""
+        from app import update_checker
+
+        class FakeResponse:
+            headers = {"Content-Length": "100"}
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size):
+                yield b"short"  # far less than the declared 100 bytes
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        asset = {"name": "Scriptly-PC-Setup-99.0.0.exe", "download_url": "https://dl/x.exe", "size": 100}
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(update_checker.requests, "get", return_value=FakeResponse()):
+                with self.assertRaises(update_checker.UpdateDownloadError):
+                    update_checker.download_installer(asset, dest_dir=Path(tmp))
+            # the partial file must be cleaned up, not left behind as if it were valid
+            self.assertFalse((Path(tmp) / asset["name"]).exists())
+
+    def test_download_installer_succeeds_and_reports_progress(self):
+        from app import update_checker
+
+        payload = b"x" * 250
+
+        class FakeResponse:
+            headers = {"Content-Length": str(len(payload))}
+
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size):
+                yield payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        asset = {"name": "Scriptly-PC-Setup-99.0.0.exe", "download_url": "https://dl/x.exe", "size": len(payload)}
+        progress_calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(update_checker.requests, "get", return_value=FakeResponse()):
+                dest = update_checker.download_installer(
+                    asset, dest_dir=Path(tmp), on_progress=lambda d, t: progress_calls.append((d, t))
+                )
+            self.assertTrue(dest.exists())
+            self.assertEqual(dest.read_bytes(), payload)
+        self.assertTrue(progress_calls)
+        self.assertEqual(progress_calls[-1], (len(payload), len(payload)))
 
 
 class TestHotkeyConflicts(unittest.TestCase):

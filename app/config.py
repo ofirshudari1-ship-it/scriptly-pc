@@ -74,6 +74,7 @@ DEFAULTS = {
     "tray_background_notice_shown": False,
     "hide_noise_recordings": False,  # see Meeting.likely_noise (app/meetings.py) - off by default so nothing is ever hidden without the user opting in
     "check_for_updates_enabled": True,  # startup GitHub-releases check (app/update_checker.py) - opt-out, not opt-in, since it's a read-only unauthenticated request with no user data involved
+    "auto_update_enabled": False,  # opt-in: silently download+install a newer release and relaunch (app/update_checker.py perform_self_update) - off by default since it closes the app to install
     "start_minimized_on_login": False,  # only takes effect on a Windows-startup launch (app/autostart.py passes --minimized), never on a manual launch - STANDARDS.md 12.1/12.3
     "recording_notification_style": "minimal",  # "off" | "minimal" | "verbose" - controls tray balloon notifications specifically for recording start/stop/auto-processing-done (see app/tray.py)
 }

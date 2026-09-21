@@ -50,7 +50,7 @@ APP_VER = _read_version()
 # then compile THAT script with PyInstaller into a small standalone exe.
 
 INSTALLER_SCRIPT = r'''
-import sys, os, shutil, winreg, subprocess, ctypes, threading
+import sys, os, shutil, winreg, subprocess, ctypes, threading, time
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QStackedWidget, QVBoxLayout, QHBoxLayout,
@@ -69,6 +69,36 @@ EXE_NAME   = "Scriptly PC.exe"
 # silently never trigger.
 APP_MUTEX  = "Global\\ScriptlyPC_SingleInstance_Mutex"
 REG_KEY    = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Scriptly PC"
+
+# ── Shared install-state helpers (used by both the GUI wizard and --silent) ──
+def is_app_running() -> bool:
+    """Ports app/single_instance.py's OS-level Mutex check (the same mechanism
+    scriptly.iss used via Inno's CheckForMutexes) rather than a tasklist name
+    match, so it can't miss a renamed/relocated exe and can't false-positive on
+    an unrelated process that merely shares the app's display name."""
+    try:
+        SYNCHRONIZE = 0x00100000
+        handle = ctypes.windll.kernel32.OpenMutexW(SYNCHRONIZE, False, APP_MUTEX)
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    except Exception:
+        return False
+
+def read_registry_install_dir() -> str | None:
+    """Reads InstallLocation from the uninstall-registry entry a previous
+    install/update wrote (see write_registry() below) - used by --silent to
+    find "the existing location" when it isn't passed --install-dir explicitly,
+    so an unattended self-update always lands on top of the current install
+    rather than guessing a fresh default path."""
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_KEY)
+        value, _ = winreg.QueryValueEx(key, "InstallLocation")
+        winreg.CloseKey(key)
+        return value or None
+    except Exception:
+        return None
 
 # ── Brand palette (assets/BRAND.md - navy header / teal accent) ────────────
 NAVY       = "#152847"
@@ -417,24 +447,8 @@ class InstallPage(BasePage):
             QTimer.singleShot(200, self._start_install)
     def _log_line(self, msg):
         self._log.append(msg)
-    def _is_app_running(self) -> bool:
-        """Ports app/single_instance.py's OS-level Mutex check (the same
-        mechanism scriptly.iss used via Inno's CheckForMutexes) rather than a
-        tasklist name match, so it can't miss a renamed/relocated exe and
-        can't false-positive on an unrelated process that merely shares the
-        app's display name."""
-        try:
-            ERROR_ALREADY_EXISTS = 183
-            SYNCHRONIZE = 0x00100000
-            handle = ctypes.windll.kernel32.OpenMutexW(SYNCHRONIZE, False, APP_MUTEX)
-            if handle:
-                ctypes.windll.kernel32.CloseHandle(handle)
-                return True
-            return False
-        except Exception:
-            return False
     def _ensure_app_not_running(self) -> bool:
-        while self._is_app_running():
+        while is_app_running():
             box = QMessageBox(self)
             box.setIcon(QMessageBox.Icon.Warning)
             box.setWindowTitle(tr("wizard_title"))
@@ -490,7 +504,179 @@ class FinishPage(BasePage):
     def launch_checked(self):
         return self._launch.isChecked()
 
-# ── Install Worker ─────────────────────────────────────────────────────────────
+# ── Core install logic (shared by the GUI wizard and --silent) ─────────────
+def _find_app_dir() -> Path:
+    # --onedir build: the payload bundled into the installer is the whole
+    # "Scriptly PC"/ folder (exe + _internal/ deps), matching what
+    # build.ps1's PyInstaller step itself produces - no re-flattening.
+    here = Path(sys.executable).parent
+    candidates = [
+        here / APP_NAME,
+        here.parent / APP_NAME,
+        Path(sys._MEIPASS) / APP_NAME if hasattr(sys, "_MEIPASS") else None,
+    ]
+    for c in candidates:
+        if c and (c / EXE_NAME).exists():
+            return c
+    return None
+
+def _copy_tree_with_progress(src: Path, dest: Path, status_cb, log_cb, progress_cb):
+    """The app is large (~1GB: bundled Whisper/ctranslate2/CUDA runtime,
+    thousands of files under _internal/) - a plain shutil.copytree gives no
+    feedback for the many seconds/minutes that takes, which reads as a hung
+    installer. This walks the tree once to get a total file count, then
+    copies file-by-file (shutil.copy2, dirs made as needed) so progress
+    (mapped to the 2-85% band) moves the whole time. Copying is purely
+    additive/overwrite - it never deletes anything already in dest that isn't
+    also in src, so a silent update run on top of an existing install leaves
+    the sibling data/ and Meetings/ folders (user settings + recordings,
+    living next to the exe - see app/config.py PROJECT_ROOT) untouched."""
+    all_files = [p for p in src.rglob("*") if p.is_file()]
+    total = max(1, len(all_files))
+    log_cb(f"\u2192 {total} files to copy")
+    copied = 0
+    last_emit_pct = -1
+    for f in all_files:
+        rel = f.relative_to(src)
+        out = dest / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, out)
+        copied += 1
+        pct = 2 + int((copied / total) * 83)  # maps into the 2-85% band
+        if pct != last_emit_pct:
+            progress_cb(pct)
+            last_emit_pct = pct
+        if copied % 250 == 0 or copied == total:
+            status_cb(f"Copying Scriptly PC files\u2026 ({copied}/{total})")
+
+def _create_shortcut(target: Path, link: Path, log_cb):
+    try:
+        import win32com.client
+        shell = win32com.client.Dispatch("WScript.Shell")
+        sc = shell.CreateShortCut(str(link))
+        sc.Targetpath = str(target)
+        sc.WorkingDirectory = str(target.parent)
+        sc.IconLocation = str(target)
+        sc.save()
+    except Exception as e:
+        log_cb(f"  Shortcut warning: {e}")
+
+def write_registry(install_dir: Path, log_cb=lambda m: None):
+    try:
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_KEY)
+        winreg.SetValueEx(key, "DisplayName",      0, winreg.REG_SZ, APP_NAME)
+        winreg.SetValueEx(key, "DisplayVersion",   0, winreg.REG_SZ, APP_VER)
+        winreg.SetValueEx(key, "Publisher",        0, winreg.REG_SZ, PUBLISHER)
+        winreg.SetValueEx(key, "InstallLocation",  0, winreg.REG_SZ, str(install_dir))
+        winreg.SetValueEx(key, "UninstallString",  0, winreg.REG_SZ, str(install_dir / EXE_NAME) + " --uninstall")
+        winreg.SetValueEx(key, "DisplayIcon",      0, winreg.REG_SZ, str(install_dir / EXE_NAME))
+        winreg.SetValueEx(key, "NoModify",         0, winreg.REG_DWORD, 1)
+        winreg.CloseKey(key)
+    except Exception as e:
+        log_cb(f"  Registry warning: {e}")
+
+def perform_install(install_dir, desktop, startmenu, startup, status_cb=lambda m: None, log_cb=lambda m: None, progress_cb=lambda p: None):
+    """The actual install steps (copy payload, shortcuts, registry entry),
+    shared verbatim by the interactive GUI wizard (InstallWorker, below) and
+    the --silent unattended path (run_silent_install). Raises on failure -
+    callers decide how to surface that (GUI: log+status line; silent: stderr
+    + non-zero exit code) rather than swallowing it here."""
+    dest = Path(install_dir)
+    status_cb("Creating directory\u2026")
+    log_cb(f"\u2192 {dest}")
+    dest.mkdir(parents=True, exist_ok=True)
+    progress_cb(2)
+
+    status_cb("Copying Scriptly PC files\u2026")
+    src = _find_app_dir()
+    if src and src.exists():
+        _copy_tree_with_progress(src, dest, status_cb, log_cb, progress_cb)
+        log_cb(f"\u2713 Copied {src.name}/")
+    else:
+        log_cb("\u26a0 App folder not found - installer may be incomplete")
+    progress_cb(85)
+
+    if desktop:
+        status_cb("Creating Desktop shortcut\u2026")
+        _create_shortcut(dest / EXE_NAME, Path(os.environ["USERPROFILE"]) / "Desktop" / f"{APP_NAME}.lnk", log_cb)
+        log_cb("\u2713 Desktop shortcut")
+    progress_cb(90)
+
+    if startmenu:
+        status_cb("Creating Start Menu shortcut\u2026")
+        sm_dir = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / APP_NAME
+        sm_dir.mkdir(parents=True, exist_ok=True)
+        _create_shortcut(dest / EXE_NAME, sm_dir / f"{APP_NAME}.lnk", log_cb)
+        log_cb("\u2713 Start Menu shortcut")
+    progress_cb(93)
+
+    if startup:
+        status_cb("Adding to startup\u2026")
+        startup_dir = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+        _create_shortcut(dest / EXE_NAME, startup_dir / f"{APP_NAME}.lnk", log_cb)
+        log_cb("\u2713 Added to startup")
+    progress_cb(96)
+
+    status_cb("Writing registry entry\u2026")
+    write_registry(dest, log_cb)
+    log_cb("\u2713 Registry entry written")
+    progress_cb(99)
+
+    status_cb("Done!")
+    log_cb("\u2713 Installation complete")
+    progress_cb(100)
+
+
+def run_silent_install(install_dir: str = None) -> int:
+    """The --silent entry point: runs the whole install with zero dialogs, to
+    the existing install location (preserving settings/meeting data - see
+    perform_install's docstring), and returns a proper process exit code
+    (0 = success, 1 = failure) instead of ever calling sys.exit() itself, so
+    main() stays the single place that does.
+
+    If the app is still running (e.g. the self-update caller's own process
+    hasn't fully exited yet), this waits briefly and retries rather than
+    failing immediately or forcibly killing anything - but it will NOT wait
+    forever or force-close a live app; if it's still running after the retry
+    window, this fails loudly (non-zero exit, message on stderr) rather than
+    silently overwriting a locked, running exe."""
+    for _ in range(20):  # ~10s total - covers the caller's own process exiting after launching us
+        if not is_app_running():
+            break
+        time.sleep(0.5)
+    else:
+        print("Scriptly PC is still running - cannot complete a silent install/update.", file=sys.stderr)
+        return 1
+
+    if not install_dir:
+        install_dir = read_registry_install_dir()
+    if not install_dir:
+        install_dir = str(Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / APP_NAME)
+    dest = Path(install_dir)
+
+    # Preserve the user's existing shortcut choices (rather than defaulting to
+    # "on" like a fresh install) by checking what's already there.
+    desktop_link = Path(os.environ["USERPROFILE"]) / "Desktop" / f"{APP_NAME}.lnk"
+    startmenu_link = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / APP_NAME / f"{APP_NAME}.lnk"
+    startup_link = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / f"{APP_NAME}.lnk"
+
+    try:
+        perform_install(
+            str(dest),
+            desktop=desktop_link.exists(),
+            startmenu=startmenu_link.exists(),
+            startup=startup_link.exists(),
+            status_cb=print, log_cb=print, progress_cb=lambda p: None,
+        )
+    except Exception as e:
+        print(f"Silent install failed: {e}", file=sys.stderr)
+        return 1
+
+    print(f"Scriptly PC {APP_VER} installed silently to {dest}")
+    return 0
+
+
+# ── Install Worker (GUI wizard) ─────────────────────────────────────────────
 class InstallWorker(QThread):
     progress = pyqtSignal(int)
     status   = pyqtSignal(str)
@@ -506,130 +692,15 @@ class InstallWorker(QThread):
 
     def run(self):
         try:
-            dest = Path(self.install_dir)
-            self.status.emit("Creating directory\u2026")
-            self.log.emit(f"\u2192 {dest}")
-            dest.mkdir(parents=True, exist_ok=True)
-            self.progress.emit(2)
-
-            self.status.emit("Copying Scriptly PC files\u2026")
-            src = self._find_app_dir()
-            if src and src.exists():
-                self._copy_tree_with_progress(src, dest)
-                self.log.emit(f"\u2713 Copied {src.name}/")
-            else:
-                self.log.emit("\u26a0 App folder not found - installer may be incomplete")
-            self.progress.emit(85)
-
-            # Shortcuts
-            if self.desktop:
-                self.status.emit("Creating Desktop shortcut\u2026")
-                self._create_shortcut(
-                    dest / EXE_NAME,
-                    Path(os.environ["USERPROFILE"]) / "Desktop" / f"{APP_NAME}.lnk",
-                )
-                self.log.emit("\u2713 Desktop shortcut")
-            self.progress.emit(90)
-
-            if self.startmenu:
-                self.status.emit("Creating Start Menu shortcut\u2026")
-                sm_dir = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / APP_NAME
-                sm_dir.mkdir(parents=True, exist_ok=True)
-                self._create_shortcut(dest / EXE_NAME, sm_dir / f"{APP_NAME}.lnk")
-                self.log.emit("\u2713 Start Menu shortcut")
-            self.progress.emit(93)
-
-            if self.startup:
-                self.status.emit("Adding to startup\u2026")
-                startup_dir = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-                self._create_shortcut(dest / EXE_NAME, startup_dir / f"{APP_NAME}.lnk")
-                self.log.emit("\u2713 Added to startup")
-            self.progress.emit(96)
-
-            # Registry entry for Add/Remove Programs
-            self.status.emit("Writing registry entry\u2026")
-            self._write_registry(dest)
-            self.log.emit("\u2713 Registry entry written")
-            self.progress.emit(99)
-
-            self.status.emit("Done!")
-            self.log.emit("\u2713 Installation complete")
-            self.progress.emit(100)
+            perform_install(
+                self.install_dir, self.desktop, self.startmenu, self.startup,
+                status_cb=self.status.emit, log_cb=self.log.emit, progress_cb=self.progress.emit,
+            )
             self.finished.emit()
-
         except Exception as e:
             self.log.emit(f"ERROR: {e}")
             self.status.emit(f"Error: {e}")
             self.finished.emit()
-
-    def _find_app_dir(self) -> Path:
-        # --onedir build: the payload bundled into the installer is the whole
-        # "Scriptly PC"/ folder (exe + _internal/ deps), matching what
-        # build.ps1's PyInstaller step itself produces - no re-flattening.
-        here = Path(sys.executable).parent
-        candidates = [
-            here / APP_NAME,
-            here.parent / APP_NAME,
-            Path(sys._MEIPASS) / APP_NAME if hasattr(sys, "_MEIPASS") else None,
-        ]
-        for c in candidates:
-            if c and (c / EXE_NAME).exists():
-                return c
-        return None
-
-    def _copy_tree_with_progress(self, src: Path, dest: Path):
-        """The app is large (~1GB: bundled Whisper/ctranslate2/CUDA runtime,
-        thousands of files under _internal/) - a plain shutil.copytree gives
-        no feedback for the many seconds/minutes that takes, which reads as a
-        hung installer. This walks the tree once to get a total file count,
-        then copies file-by-file (shutil.copy2, dirs made as needed) so the
-        progress bar (mapped to the 2-85% band) and status line move the
-        whole time, with a log line only every 200 files (or 500 for a huge
-        long tail) to keep the log widget itself from becoming the
-        bottleneck."""
-        all_files = [p for p in src.rglob("*") if p.is_file()]
-        total = max(1, len(all_files))
-        self.log.emit(f"\u2192 {total} files to copy")
-        copied = 0
-        last_emit_pct = -1
-        for f in all_files:
-            rel = f.relative_to(src)
-            out = dest / rel
-            out.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(f, out)
-            copied += 1
-            pct = 2 + int((copied / total) * 83)  # maps into the 2-85% band
-            if pct != last_emit_pct:
-                self.progress.emit(pct)
-                last_emit_pct = pct
-            if copied % 250 == 0 or copied == total:
-                self.status.emit(f"Copying Scriptly PC files\u2026 ({copied}/{total})")
-
-    def _create_shortcut(self, target: Path, link: Path):
-        try:
-            import win32com.client
-            shell = win32com.client.Dispatch("WScript.Shell")
-            sc = shell.CreateShortCut(str(link))
-            sc.Targetpath = str(target)
-            sc.WorkingDirectory = str(target.parent)
-            sc.IconLocation = str(target)
-            sc.save()
-        except Exception as e:
-            self.log.emit(f"  Shortcut warning: {e}")
-
-    def _write_registry(self, install_dir: Path):
-        try:
-            key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_KEY)
-            winreg.SetValueEx(key, "DisplayName",      0, winreg.REG_SZ, APP_NAME)
-            winreg.SetValueEx(key, "DisplayVersion",   0, winreg.REG_SZ, APP_VER)
-            winreg.SetValueEx(key, "Publisher",        0, winreg.REG_SZ, PUBLISHER)
-            winreg.SetValueEx(key, "InstallLocation",  0, winreg.REG_SZ, str(install_dir))
-            winreg.SetValueEx(key, "UninstallString",  0, winreg.REG_SZ, str(install_dir / EXE_NAME) + " --uninstall")
-            winreg.SetValueEx(key, "DisplayIcon",      0, winreg.REG_SZ, str(install_dir / EXE_NAME))
-            winreg.SetValueEx(key, "NoModify",         0, winreg.REG_DWORD, 1)
-            winreg.CloseKey(key)
-        except Exception as e:
-            self.log.emit(f"  Registry warning: {e}")
 
 # ── Wizard (QStackedWidget-based) ───────────────────────────────────────────
 class SetupWizard(QDialog):
@@ -746,7 +817,27 @@ def _load_license_text() -> str:
     return "Scriptly PC - see EULA.txt for the full license."
 
 
+def _parse_silent_args(argv):
+    """--silent triggers the unattended path; --install-dir=<path> optionally
+    pins the target (see run_silent_install for the fallback chain when it's
+    omitted: existing registry InstallLocation, then the default Program
+    Files path)."""
+    silent = "--silent" in argv
+    install_dir = None
+    for a in argv:
+        if a.startswith("--install-dir="):
+            install_dir = a.split("=", 1)[1]
+    return silent, install_dir
+
 def main():
+    # --silent: the whole point is zero dialogs, so this branch never touches
+    # QApplication/QDialog at all - just runs the install and exits with a
+    # real process exit code, so a caller (e.g. app/update_checker.py's
+    # self-update flow) can tell success from failure without parsing output.
+    silent, install_dir = _parse_silent_args(sys.argv[1:])
+    if silent:
+        sys.exit(run_silent_install(install_dir))
+
     app = QApplication(sys.argv)
     # Force Fusion style: Qt6's native Windows 11 style ignores custom
     # QPushButton background/border QSS for several button states (a known

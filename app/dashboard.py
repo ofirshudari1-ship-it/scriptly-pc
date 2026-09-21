@@ -1582,6 +1582,76 @@ class Dashboard:
         ).pack(side="left" if anchor == "w" else "right")
         update_status_lbl.pack(fill="x", padx=0, pady=(4, 0))
 
+        auto_update_var = tk.BooleanVar(value=config.get("auto_update_enabled", False))
+        ctk.CTkCheckBox(sec_storage, text=t("settings_auto_update"), variable=auto_update_var).pack(
+            anchor=anchor, padx=16, pady=(8, 0)
+        )
+        add_help(sec_storage, t("settings_auto_update_help"))
+
+        update_now_status_lbl = ctk.CTkLabel(
+            sec_storage, text="", text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=12), anchor=anchor,
+        )
+
+        def do_update_now():
+            update_now_btn.configure(state="disabled")
+            update_now_status_lbl.configure(text=t("update_check_checking"))
+
+            def worker():
+                from . import update_checker
+
+                try:
+                    result = update_checker.check_for_update_sync()
+                except Exception as exc:  # noqa: BLE001
+                    self.root.after(0, lambda: _finish(t("update_failed", error=str(exc))))
+                    return
+
+                if not result:
+                    self.root.after(0, lambda: _finish(t("update_check_up_to_date")))
+                    return
+                if not result.get("asset"):
+                    self.root.after(0, lambda: _finish(t("update_not_hosted", version=result["version"])))
+                    return
+
+                def on_progress(downloaded, total):
+                    pct = int(downloaded / total * 100) if total else 0
+                    self.root.after(0, lambda: update_now_status_lbl.configure(text=t("update_downloading", pct=pct)))
+
+                try:
+                    update_checker.perform_self_update(on_progress=on_progress)
+                except update_checker.NoAssetHostedError as exc:
+                    self.root.after(0, lambda: _finish(str(exc)))
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self.root.after(0, lambda: _finish(t("update_failed", error=str(exc))))
+                    return
+
+                self.root.after(0, lambda: _prompt_restart(result["version"]))
+
+            def _finish(msg):
+                update_now_status_lbl.configure(text=msg)
+                update_now_btn.configure(state="normal")
+
+            def _prompt_restart(version):
+                update_now_btn.configure(state="normal")
+                if messagebox.askyesno(t("app_title"), t("update_ready_restart_confirm", version=version)):
+                    self._flush_geometry()
+                    if self.controller.is_recording:
+                        self.controller.stop_recording()
+                    self.root.event_generate("<<ScriptlyQuit>>")
+                else:
+                    update_now_status_lbl.configure(text=t("update_ready_restart_later"))
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        update_now_row = ctk.CTkFrame(sec_storage, fg_color="transparent")
+        update_now_row.pack(fill="x", padx=16, pady=(8, 0))
+        update_now_btn = ctk.CTkButton(
+            update_now_row, text=t("settings_update_now"), height=28, fg_color=C["teal"],
+            hover_color=C["teal_hover"], text_color="#062824", command=do_update_now,
+        )
+        update_now_btn.pack(side="left" if anchor == "w" else "right")
+        update_now_status_lbl.pack(fill="x", padx=0, pady=(4, 0))
+
         export_formats = {
             "docx": t("settings_export_format_docx"),
             "txt": t("settings_export_format_txt"),
@@ -1694,6 +1764,7 @@ class Dashboard:
             config["recording_notification_style"] = notif_style_reverse.get(notif_style_var.get(), "minimal")
             config["auto_save_recordings"] = bool(auto_save_var.get())
             config["check_for_updates_enabled"] = bool(check_updates_var.get())
+            config["auto_update_enabled"] = bool(auto_update_var.get())
             config["export_format"] = export_reverse.get(export_var.get(), "docx")
             config["start_minimized_on_login"] = bool(start_min_var.get())
             old_scale = config.get("ui_scale", 1.0)

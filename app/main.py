@@ -116,11 +116,39 @@ def main():
 
     _register_hotkey(controller)
 
-    def on_update_available(version, url):
+    def on_update_available(version, url, asset):
         # Called from the background update-check thread - hop back to the Tk
         # thread before touching any UI (pystray's own icon is thread-safe for
         # notify(), but keep this consistent with the rest of the codebase).
         root.after(0, lambda: update_checker.notify_update_via_tray(tray, version, url))
+
+        if not controller.config.get("auto_update_enabled", False) or not asset:
+            # Either the user hasn't opted into silent auto-update, or (today's
+            # actual state) GitHub reports the release but nothing is attached
+            # to download yet - either way, the tray notification above is all
+            # that happens; the user updates manually from Settings/the release page.
+            return
+
+        def auto_update_worker():
+            try:
+                update_checker.perform_self_update()
+            except Exception:
+                logger.exception("automatic update download/install failed")
+                return
+
+            def maybe_quit_and_relaunch():
+                if controller.is_recording:
+                    # Never interrupt a live recording, even for an opted-in
+                    # silent update - the downloaded installer just sits in
+                    # temp and gets picked up again on the next update check.
+                    logger.info("auto-update downloaded but a recording is in progress - deferring restart")
+                    return
+                logger.info("auto-update downloaded - quitting to install v%s", version)
+                quit_everything()
+
+            root.after(0, maybe_quit_and_relaunch)
+
+        threading.Thread(target=auto_update_worker, daemon=True, name="ScriptlyAutoUpdate").start()
 
     # A few seconds after launch, not on startup itself, so the update check never
     # competes with the app actually becoming usable. Non-blocking: the real work
