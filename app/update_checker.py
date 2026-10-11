@@ -1,23 +1,27 @@
-"""בדיקת עדכונים אוטומטית מול GitHub Releases - רצה פעם אחת בכל הפעלה, ב-thread נפרד
-כדי לא לחסום את ה-UI, ולעולם לא זורקת/מציגה שגיאה אם אין רשת או שה-API לא זמין.
+"""Update checker + self-update for Scriptly PC (GitHub Releases).
 
-המקור הקנוני להפצה הוא https://github.com/ofirshudari1-ship-it/scriptly-pc - הבדיקה
-פונה ל-releases/latest הציבורי (בלי טוקן, בלי אימות) ומשווה מול app.config.VERSION.
+Flow: a background thread checks GitHub a few seconds after launch and then
+every ~6 hours (never blocks the UI, never raises). When a newer release has an
+installer attached and "install updates automatically" is on, the installer is
+downloaded and verified (HTTPS, GitHub repo URL prefix, byte size, "MZ" header,
+sha256 from the GitHub asset digest when present - never blocks if the digest is
+absent) and then launched with `--silent --relaunch --install-dir=<this install>`
+at a safe moment (no recording running) or when the app exits.
 
-This module also drives the actual self-update (download + silent install + relaunch,
-see perform_self_update below). KNOWN LIMITATION: the installer is ~2.17GB, which
-exceeds GitHub's 2GB release-asset limit, so as of this writing every published
-release ships as tag+notes only with NO binary attached. perform_self_update /
-_find_installer_asset detect that honestly (no assets on the release -> raises
-NoAssetHostedError with a clear message) instead of attempting a download that
-would just 404. The mechanism itself is generic - it reads whatever asset URL the
-GitHub release API reports - so it will start working the moment a binary is
-actually attached to a release (e.g. once the installer is hosted on a cloud
-bucket and the release is edited to link/attach it there)."""
+The installer embeds a requireAdministrator manifest (--uac-admin), so a plain
+CreateProcess fails with WinError 740 from a non-elevated app. In that case the
+launch falls back to ShellExecute, which shows the one Windows UAC prompt; if the
+user declines, nothing is installed and the app keeps running. After the silent
+install the (elevated) installer relaunches the app through explorer.exe so the
+app does not inherit administrator rights.
+
+Source of truth: https://github.com/ofirshudari1-ship-it/scriptly-pc"""
+import hashlib
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -31,34 +35,42 @@ logger = get_logger(__name__)
 
 REPO = "ofirshudari1-ship-it/scriptly-pc"
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+# Only installers attached to THIS repo's releases are ever downloaded/executed.
+ALLOWED_ASSET_PREFIX = f"https://github.com/{REPO}/releases/download/"
 REQUEST_TIMEOUT_SECONDS = 5
 DOWNLOAD_TIMEOUT_SECONDS = 30  # per-request timeout for the streamed download (not total transfer time)
-# GitHub's REST API rejects requests with no User-Agent header (403) - this is
-# not a secret, just an identifier, same convention as e.g. pip/npm clients.
+FIRST_CHECK_DELAY_SECONDS = 5
+CHECK_INTERVAL_SECONDS = 6 * 60 * 60
 USER_AGENT = "Scriptly-PC-UpdateChecker"
+INSTALLER_PREFIX = "Scriptly-PC-Setup-"
+ERROR_ELEVATION_REQUIRED = 740
 
-_checked_this_session = False
+# version -> path of a verified installer already downloaded this session
+_STAGED: dict = {}
+_stop_event = threading.Event()
 
 
 class UpdateError(Exception):
-    """Base class for the self-update flow - anything that should surface as an
-    honest failure message to the user rather than crash the calling thread."""
+    """Anything in the self-update flow that should surface as an honest failure
+    message to the user rather than crash the calling thread."""
 
 
 class NoAssetHostedError(UpdateError):
-    """A newer release exists on GitHub, but it has no installer attached yet.
-    This is expected/normal today (see module docstring - the 2GB hosting gap)
-    and must be handled as a graceful, honest outcome, never as a crash."""
+    """A newer release exists on GitHub but has no installer attached."""
 
 
 class UpdateDownloadError(UpdateError):
-    """The download itself failed or produced a truncated/incomplete file."""
+    """The download failed, was truncated, or failed integrity verification."""
+
+
+class UpdateLaunchError(UpdateError):
+    """The installer could not be started (e.g. the UAC prompt was declined)."""
 
 
 def _parse_version(version_str: str) -> tuple:
     """"v0.13.1" / "0.13.1" -> (0, 13, 1). Non-numeric parts are dropped rather than
     raising, so a release tag like "v0.13.1-beta" still compares on its numeric prefix."""
-    cleaned = version_str.strip().lstrip("vV")
+    cleaned = (version_str or "").strip().lstrip("vV")
     parts = []
     for chunk in cleaned.split("."):
         digits = ""
@@ -77,10 +89,24 @@ def is_newer(remote_version: str, current_version: str = VERSION) -> bool:
     return _parse_version(remote_version) > _parse_version(current_version)
 
 
+def is_trusted_asset_url(url) -> bool:
+    return isinstance(url, str) and url.startswith(ALLOWED_ASSET_PREFIX)
+
+
+def _extract_sha256(digest) -> str:
+    """GitHub publishes asset digests as "sha256:<64 hex>". Returns the hex, or ""
+    when absent/malformed (callers must then skip the check, never fail on it)."""
+    d = str(digest or "").strip().lower()
+    if not d.startswith("sha256:"):
+        return ""
+    d = d[len("sha256:"):]
+    if len(d) != 64 or any(c not in "0123456789abcdef" for c in d):
+        return ""
+    return d
+
+
 def _fetch_latest_release() -> dict:
-    """GET releases/latest - returns {} on any failure (network, timeout, non-2xx,
-    malformed JSON). Never raises: this must be safe to call from a background
-    thread with nothing watching for exceptions."""
+    """GET releases/latest - returns {} on any failure. Never raises."""
     try:
         resp = requests.get(
             LATEST_RELEASE_URL,
@@ -97,27 +123,28 @@ def _fetch_latest_release() -> dict:
 
 
 def _find_installer_asset(release_data: dict) -> dict | None:
-    """Looks at the GitHub release JSON's `assets` array for a downloadable Windows
-    installer. Returns {"name", "download_url", "size"} or None if nothing is
-    attached yet - which is today's actual state for every Scriptly PC release,
-    since the installer (~2.17GB) exceeds GitHub's 2GB release-asset limit. This
-    is intentionally generic (any .exe asset qualifies) rather than hardcoding
-    build_installer.py's exact filename pattern, so it keeps working if that
-    naming ever changes."""
+    """The CPU installer (Scriptly-PC-Setup-<ver>.exe) attached to the release, as
+    {"name", "download_url", "size", "sha256"}; None if nothing matching is attached.
+    The optional "-gpu" variant is never auto-installed over the standard one."""
     for asset in release_data.get("assets") or []:
-        name = asset.get("name", "")
+        name = asset.get("name", "") or ""
         url = asset.get("browser_download_url")
-        if not url or not name.lower().endswith(".exe"):
+        low = name.lower()
+        if not url or not low.startswith(INSTALLER_PREFIX.lower()) or not low.endswith(".exe"):
             continue
-        return {"name": name, "download_url": url, "size": int(asset.get("size") or 0)}
+        if low.endswith("-gpu.exe"):
+            continue
+        try:
+            size = int(asset.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        return {"name": name, "download_url": url, "size": size, "sha256": _extract_sha256(asset.get("digest"))}
     return None
 
 
 def check_for_update_sync() -> dict | None:
-    """Blocking check - returns {"version": str, "url": str, "asset": dict|None}
-    if a newer release exists, else None. `asset` is None when GitHub reports
-    the release but nothing downloadable is attached to it yet (see module
-    docstring). Call from a background thread, not the Qt/Tk main thread."""
+    """Blocking check - {"version", "url", "asset": dict|None} if a newer release
+    exists, else None. Call from a background thread."""
     data = _fetch_latest_release()
     tag = data.get("tag_name")
     html_url = data.get("html_url")
@@ -135,13 +162,36 @@ def open_release_page(url: str) -> None:
         logger.warning("could not open release page %s: %s", url, exc)
 
 
+def verify_installer_file(path: Path, expected_size: int = 0, expected_sha256: str = "") -> str:
+    """Returns "" if the file passes every check, else a short reason. Checks byte
+    size (when known), the "MZ" PE header, and sha256 (only when a digest is given)."""
+    try:
+        actual = path.stat().st_size
+        if actual == 0:
+            return "empty file"
+        if expected_size and actual != expected_size:
+            return f"size mismatch: got {actual}, expected {expected_size}"
+        with open(path, "rb") as f:
+            if f.read(2) != b"MZ":
+                return "not a Windows executable (missing MZ header)"
+        if expected_sha256:
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            if h.hexdigest() != expected_sha256.lower():
+                return "sha256 mismatch"
+    except OSError as exc:
+        return f"cannot read file: {exc}"
+    return ""
+
+
 def download_installer(asset: dict, dest_dir: Path | None = None, on_progress=None) -> Path:
-    """Streams the release's installer asset to a temp file with progress
-    reporting (`on_progress(downloaded_bytes, total_bytes)`, total may be 0 if
-    unknown), then verifies the download actually completed in full (size
-    check against the asset's reported size / Content-Length) before returning.
-    Raises UpdateDownloadError - never returns a partially-written file as if
-    it succeeded, and always cleans up a failed/partial download."""
+    """Streams the installer to a temp file with progress (`on_progress(done, total)`)
+    and verifies it (see verify_installer_file) before returning. Raises
+    UpdateDownloadError - a failed or unverified file is always deleted."""
+    if not is_trusted_asset_url(asset.get("download_url")):
+        raise UpdateDownloadError("untrusted installer URL (not a release asset of this repository)")
     if dest_dir is None:
         dest_dir = Path(tempfile.gettempdir())
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -173,99 +223,176 @@ def download_installer(asset: dict, dest_dir: Path | None = None, on_progress=No
         dest_path.unlink(missing_ok=True)
         raise UpdateDownloadError(f"download failed: {exc}") from exc
 
-    actual_size = dest_path.stat().st_size if dest_path.exists() else 0
-    if actual_size == 0 or (expected_size and actual_size != expected_size):
+    problem = verify_installer_file(dest_path, expected_size, asset.get("sha256") or "")
+    if problem:
         dest_path.unlink(missing_ok=True)
-        raise UpdateDownloadError(
-            f"download incomplete: got {actual_size} bytes, expected {expected_size or 'unknown'}"
-        )
+        raise UpdateDownloadError(f"download rejected: {problem}")
+    logger.info("update installer downloaded and verified: %s", dest_path)
     return dest_path
 
 
-def launch_silent_installer(installer_path: Path, install_dir: Path | None = None) -> None:
-    """Launches the downloaded installer with --silent, pinned to this install's
-    own folder via --install-dir so the update lands exactly where this copy of
-    Scriptly PC is already running from, rather than trusting the installer's
-    own registry lookup (a reasonable fallback for a fresh/manual install, but
-    not the right source of truth mid self-update). Detached so it survives
-    this process exiting right after."""
-    target_dir = str(install_dir or PROJECT_ROOT)
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(
-        [str(installer_path), "--silent", f"--install-dir={target_dir}"],
-        creationflags=creationflags,
-        close_fds=True,
-    )
+def cleanup_stale_downloads(max_age_seconds: float = 3600.0) -> int:
+    """Removes installers older than max_age left in %TEMP% by earlier self-updates
+    (the detached installer runs from that file, so it can't be deleted earlier).
+    Never raises; returns how many were removed."""
+    removed = 0
+    try:
+        now = time.time()
+        for p in Path(tempfile.gettempdir()).glob(f"{INSTALLER_PREFIX}*.exe"):
+            try:
+                if now - p.stat().st_mtime > max_age_seconds:
+                    p.unlink()
+                    removed += 1
+            except OSError:
+                continue
+    except Exception:  # noqa: BLE001
+        pass
+    return removed
 
 
-def perform_self_update(on_progress=None) -> Path:
-    """Blocking, synchronous end-to-end self-update: fetch the latest release,
-    require a downloadable asset (raise NoAssetHostedError with an honest
-    message if the release has nothing attached - today's actual state), download
-    it with progress reporting, verify the download, then launch it silently.
+def _shell_execute_elevated(exe: str, params: str) -> bool:
+    """Starts `exe` through ShellExecute so Windows shows its UAC prompt. True once
+    the prompt was accepted and the process started; declining returns <= 32."""
+    try:
+        import ctypes
 
-    Does NOT stop any in-progress recording or quit the app itself - by design,
-    the caller (Settings UI / auto-update worker) owns that decision and must
-    only quit *after* this returns successfully, having first cleanly stopped
-    any live recording. Raises UpdateError (or a subclass) on any failure;
-    never partially succeeds silently."""
+        rc = ctypes.windll.shell32.ShellExecuteW(None, "open", exe, params, None, 0)
+        if rc > 32:
+            logger.info("silent installer started via ShellExecute (UAC accepted)")
+            return True
+        logger.warning("silent installer not started (UAC declined or blocked, code %s)", rc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ShellExecute failed: %s", exc)
+    return False
+
+
+def build_installer_args(install_dir: Path | str | None = None, relaunch: bool = True) -> list:
+    args = ["--silent"]
+    if relaunch:
+        args.append("--relaunch")
+    args.append(f"--install-dir={install_dir or PROJECT_ROOT}")
+    return args
+
+
+def launch_silent_installer(installer_path, install_dir: Path | str | None = None, relaunch: bool = True,
+                            *, popen=subprocess.Popen, shell_execute=_shell_execute_elevated) -> bool:
+    """Starts the installer silently, detached (this process quits right after).
+    Falls back to a UAC prompt via ShellExecute on WinError 740. Returns True once
+    started; False if it could not be started (missing file, UAC declined, blocked).
+    Never raises. `popen`/`shell_execute` are injectable for tests."""
+    try:
+        installer_path = Path(installer_path)
+        if not installer_path.exists():
+            logger.warning("installer to launch is missing: %s", installer_path)
+            return False
+        args = build_installer_args(install_dir, relaunch)
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        try:
+            popen([str(installer_path), *args], creationflags=creationflags, close_fds=True)
+            return True
+        except OSError as exc:
+            if getattr(exc, "winerror", None) != ERROR_ELEVATION_REQUIRED:
+                raise
+            logger.info("installer requires elevation (WinError 740) - asking for UAC")
+            return bool(shell_execute(str(installer_path), subprocess.list2cmdline(args)))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("launching the silent installer failed: %s", exc)
+        return False
+
+
+def stage_update(on_progress=None) -> dict:
+    """Check + download + verify, WITHOUT launching anything. Returns
+    {"version", "installer_path", "url"}. Raises NoAssetHostedError / UpdateError /
+    UpdateDownloadError. Re-uses an installer already staged for the same version."""
     data = _fetch_latest_release()
     tag = data.get("tag_name")
     if not tag:
         raise UpdateError("could not reach the update server (network error or GitHub API unavailable)")
-
+    version = tag.lstrip("vV")
     asset = _find_installer_asset(data)
     if not asset:
-        version = tag.lstrip("vV")
         raise NoAssetHostedError(
             f"Scriptly PC {version} is available, but the installer isn't hosted here yet - "
             f"check https://github.com/{REPO}/releases for how to get it."
         )
+    staged = _STAGED.get(version)
+    if staged and Path(staged).exists() and not verify_installer_file(Path(staged), asset["size"], asset["sha256"]):
+        return {"version": version, "installer_path": Path(staged), "url": data.get("html_url", "")}
+    path = download_installer(asset, on_progress=on_progress)
+    _STAGED[version] = str(path)
+    return {"version": version, "installer_path": path, "url": data.get("html_url", "")}
 
-    installer_path = download_installer(asset, on_progress=on_progress)
-    launch_silent_installer(installer_path)
-    return installer_path
+
+def pending_installer() -> tuple | None:
+    """(version, path) of the newest verified installer staged this session, if its
+    file still exists and is newer than the running version; else None."""
+    best = None
+    for version, p in _STAGED.items():
+        if Path(p).exists() and is_newer(version, VERSION):
+            if best is None or _parse_version(version) > _parse_version(best[0]):
+                best = (version, Path(p))
+    return best
 
 
-def check_for_updates_async(config: dict, on_update_available) -> None:
-    """Kicks off the check on a daemon background thread and returns immediately.
-    `on_update_available(version, url, asset)` is called only when a newer release
-    is found - the caller decides how to surface it (tray notification, optional
-    auto-update, etc.) and must itself be safe to call from a background thread
-    (or hop back to the UI thread inside the callback, same as the rest of this
-    codebase does with `root.after(...)`). `asset` is None when nothing is
-    downloadable on the release yet."""
-    global _checked_this_session
+def install_pending() -> bool:
+    """Launches the staged installer (UAC prompt if needed). True if it started."""
+    pend = pending_installer()
+    if not pend:
+        return False
+    ok = launch_silent_installer(pend[1])
+    if ok:
+        _STAGED.pop(pend[0], None)
+    return ok
 
-    if _checked_this_session:
-        return
-    if not config.get("check_for_updates_enabled", True):
-        return
 
+def perform_self_update(on_progress=None) -> Path:
+    """Blocking end-to-end: stage_update + launch. Raises UpdateError subclasses on
+    failure (UpdateLaunchError when the installer could not start)."""
+    staged = stage_update(on_progress)
+    if not launch_silent_installer(staged["installer_path"]):
+        raise UpdateLaunchError("could not start the installer (administrator approval was declined or blocked)")
+    _STAGED.pop(staged["version"], None)
+    return staged["installer_path"]
+
+
+def start_periodic_checks(get_config, on_update_available,
+                          first_delay: float = FIRST_CHECK_DELAY_SECONDS,
+                          interval: float = CHECK_INTERVAL_SECONDS):
+    """Daemon thread: first check shortly after launch, then every `interval`
+    seconds. `get_config()` is read on each tick so the Settings toggle takes effect
+    live. `on_update_available(version, url, asset)` runs on the worker thread - hop
+    to the UI thread inside it. Returns the thread; stop_periodic_checks() ends it."""
     def worker():
-        global _checked_this_session
-        _checked_this_session = True
-        try:
-            result = check_for_update_sync()
-            if result:
-                logger.info("update available: %s (current: %s)", result["version"], VERSION)
-                on_update_available(result["version"], result["url"], result.get("asset"))
-            else:
-                logger.info("update check: already on latest version (%s)", VERSION)
-        except Exception:
-            logger.exception("unexpected error during update check")
+        if _stop_event.wait(first_delay):
+            return
+        while True:
+            try:
+                if get_config().get("check_for_updates_enabled", True):
+                    result = check_for_update_sync()
+                    if result:
+                        logger.info("update available: %s (current: %s)", result["version"], VERSION)
+                        on_update_available(result["version"], result["url"], result.get("asset"))
+                    else:
+                        logger.info("update check: already on latest version (%s)", VERSION)
+            except Exception:  # noqa: BLE001
+                logger.exception("unexpected error during update check")
+            if _stop_event.wait(interval):
+                return
 
-    threading.Thread(target=worker, daemon=True, name="ScriptlyUpdateCheck").start()
+    th = threading.Thread(target=worker, daemon=True, name="ScriptlyUpdateCheck")
+    th.start()
+    return th
+
+
+def stop_periodic_checks() -> None:
+    _stop_event.set()
 
 
 def notify_update_via_tray(tray, version: str, url: str) -> None:
-    """Reuses the existing pystray balloon-notification mechanism (TrayIcon._on_event
-    already does `self.icon.notify(...)` for other events) instead of adding a new
-    notification channel. Clicking the balloon on Windows doesn't carry a callback
-    through pystray, so this just notifies; `open_release_page` is exposed
-    separately for a manual "Check for Updates" action to call directly."""
+    """Reuses the pystray balloon notification. Only notifies; clicking a balloon
+    carries no callback, so the Settings page offers the manual route."""
     try:
         tray.icon.notify(t("update_available_body", version=version), t("update_available_title"))
     except Exception:

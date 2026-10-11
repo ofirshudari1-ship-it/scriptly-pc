@@ -355,7 +355,7 @@ class TestUpdateChecker(unittest.TestCase):
             ]
         }
         asset = _find_installer_asset(release)
-        self.assertEqual(asset, {"name": "Scriptly-PC-Setup-0.16.0.exe", "download_url": "https://example/x.exe", "size": 123})
+        self.assertEqual(asset, {"name": "Scriptly-PC-Setup-0.16.0.exe", "download_url": "https://example/x.exe", "size": 123, "sha256": ""})
 
     def test_find_installer_asset_none_when_no_assets_attached(self):
         """The actual current state of every Scriptly PC release - the installer
@@ -452,7 +452,7 @@ class TestUpdateChecker(unittest.TestCase):
     def test_download_installer_succeeds_and_reports_progress(self):
         from app import update_checker
 
-        payload = b"x" * 250
+        payload = b"MZ" + b"x" * 248
 
         class FakeResponse:
             headers = {"Content-Length": str(len(payload))}
@@ -469,7 +469,7 @@ class TestUpdateChecker(unittest.TestCase):
             def __exit__(self, *a):
                 return False
 
-        asset = {"name": "Scriptly-PC-Setup-99.0.0.exe", "download_url": "https://dl/x.exe", "size": len(payload)}
+        asset = {"name": "Scriptly-PC-Setup-99.0.0.exe", "download_url": update_checker.ALLOWED_ASSET_PREFIX + "v99.0.0/Scriptly-PC-Setup-99.0.0.exe", "size": len(payload)}
         progress_calls = []
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(update_checker.requests, "get", return_value=FakeResponse()):

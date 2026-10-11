@@ -9,6 +9,7 @@ from pathlib import Path
 import requests
 
 from . import audio_devices
+from .config import has_bundled_cuda_runtime
 from .i18n import t
 
 CLOUD_SYNC_MARKERS = ("onedrive", "dropbox", "google drive", "icloud")
@@ -27,17 +28,27 @@ def check_ollama(ollama_url: str, model: str):
 
 
 def check_gpu():
+    """Two independent questions, both surfaced: does the machine have an NVIDIA
+    GPU at all (nvidia-smi), and does *this build* actually bundle the CUDA/
+    cuDNN runtime to use it (has_bundled_cuda_runtime - false for the default
+    CPU-only build). A GPU present but unusable by this build is not "ok" -
+    reporting it as such would mislead the user into thinking acceleration is
+    active when every transcription is silently running on CPU anyway."""
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
             capture_output=True, text=True, timeout=5,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            gpu_line = result.stdout.strip().splitlines()[0]
-            return "ok", t("diag_gpu_title"), gpu_line
-        return "warn", t("diag_gpu_title"), t("diag_gpu_none")
+        gpu_present = result.returncode == 0 and bool(result.stdout.strip())
     except Exception:
+        gpu_present = False
+
+    if not gpu_present:
         return "warn", t("diag_gpu_title"), t("diag_gpu_none")
+    gpu_line = result.stdout.strip().splitlines()[0]
+    if has_bundled_cuda_runtime():
+        return "ok", t("diag_gpu_title"), gpu_line
+    return "warn", t("diag_gpu_title"), t("diag_gpu_present_no_runtime", gpu=gpu_line)
 
 
 def check_microphone(mic_device_index):

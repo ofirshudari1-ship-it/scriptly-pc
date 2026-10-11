@@ -108,7 +108,20 @@ def main():
     else:
         root.deiconify()
 
-    def quit_everything():
+    update_state = {"declined": False, "staging": False, "notified": set()}
+
+    def quit_everything(install_pending_update=True):
+        # On exit: if a verified update was already downloaded and the user
+        # hasn't declined its UAC prompt this session, install it now (silent,
+        # relaunches Scriptly PC afterwards). Never while a recording is running.
+        if (install_pending_update and controller.config.get("auto_update_enabled", True)
+                and not update_state["declined"] and not controller.is_recording):
+            try:
+                if update_checker.pending_installer():
+                    logger.info("installing downloaded update on exit")
+                    update_checker.install_pending()
+            except Exception:
+                logger.exception("installing the pending update on exit failed")
         try:
             tray.stop()
         except Exception:
@@ -121,49 +134,55 @@ def main():
         on_quit=lambda: root.after(0, quit_everything),
     )
     root.bind("<<ScriptlyQuit>>", lambda e: quit_everything())
+    root.bind("<<ScriptlyQuitNoUpdate>>", lambda e: quit_everything(install_pending_update=False))
 
     threading.Thread(target=tray.run, daemon=True).start()
 
     _register_hotkey(controller)
 
-    def on_update_available(version, url, asset):
-        # Called from the background update-check thread - hop back to the Tk
-        # thread before touching any UI (pystray's own icon is thread-safe for
-        # notify(), but keep this consistent with the rest of the codebase).
-        root.after(0, lambda: update_checker.notify_update_via_tray(tray, version, url))
-
-        if not controller.config.get("auto_update_enabled", False) or not asset:
-            # Either the user hasn't opted into silent auto-update, or (today's
-            # actual state) GitHub reports the release but nothing is attached
-            # to download yet - either way, the tray notification above is all
-            # that happens; the user updates manually from Settings/the release page.
+    def install_update_when_idle():
+        # UI thread. Installs a downloaded update as soon as nothing is recording;
+        # re-checks every minute while a recording is running.
+        if update_state["declined"] or not update_checker.pending_installer():
             return
+        if not controller.config.get("auto_update_enabled", True):
+            return
+        if controller.is_recording:
+            root.after(60000, install_update_when_idle)
+            return
+        if update_checker.install_pending():
+            logger.info("auto-update launched - quitting so the installer can replace the app")
+            quit_everything(install_pending_update=False)
+        else:
+            # UAC declined / installer blocked: keep running, don't nag again this session.
+            update_state["declined"] = True
+            logger.info("auto-update installer was not started - will not ask again this session")
 
-        def auto_update_worker():
-            try:
-                update_checker.perform_self_update()
-            except Exception:
-                logger.exception("automatic update download/install failed")
-                return
+    def on_update_available(version, url, asset):
+        # Called from the background update-check thread (first check shortly after
+        # launch, then every ~6h) - hop back to the Tk thread before touching any UI.
+        if version not in update_state["notified"]:
+            update_state["notified"].add(version)
+            root.after(0, lambda: update_checker.notify_update_via_tray(tray, version, url))
 
-            def maybe_quit_and_relaunch():
-                if controller.is_recording:
-                    # Never interrupt a live recording, even for an opted-in
-                    # silent update - the downloaded installer just sits in
-                    # temp and gets picked up again on the next update check.
-                    logger.info("auto-update downloaded but a recording is in progress - deferring restart")
-                    return
-                logger.info("auto-update downloaded - quitting to install v%s", version)
-                quit_everything()
+        if (not controller.config.get("auto_update_enabled", True) or not asset
+                or update_state["declined"] or update_state["staging"]):
+            return
+        update_state["staging"] = True
+        try:
+            update_checker.stage_update()
+        except Exception:
+            logger.exception("automatic update download failed")
+            return
+        finally:
+            update_state["staging"] = False
+        root.after(0, install_update_when_idle)
 
-            root.after(0, maybe_quit_and_relaunch)
-
-        threading.Thread(target=auto_update_worker, daemon=True, name="ScriptlyAutoUpdate").start()
-
-    # A few seconds after launch, not on startup itself, so the update check never
-    # competes with the app actually becoming usable. Non-blocking: the real work
-    # happens on a background thread (see update_checker.check_for_updates_async).
-    root.after(5000, lambda: update_checker.check_for_updates_async(controller.config, on_update_available))
+    # A few seconds after launch, then every ~6 hours, on a background thread so the
+    # check never competes with the app becoming usable. Leftover installers from
+    # earlier self-updates are removed from %TEMP% first.
+    update_checker.cleanup_stale_downloads()
+    update_checker.start_periodic_checks(lambda: controller.config, on_update_available)
 
     if not controller.config.get("onboarding_done", False):
         hotkey_before_onboarding = controller.config["hotkey"]

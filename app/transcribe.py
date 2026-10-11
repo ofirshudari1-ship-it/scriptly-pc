@@ -1,32 +1,23 @@
 """תמלול קובץ אודיו לעברית באמצעות faster-whisper עם מודל ivrit-ai (מקומי, ללא ענן)."""
 import os
 import sys
-from pathlib import Path
 
+from .config import cuda_dll_dirs, has_bundled_cuda_runtime
 from .logger import get_logger
 
 logger = get_logger(__name__)
 
 
 def _register_cuda_dll_dirs():
-    """מרשום את תיקיות ה-DLL של cuBLAS/cuDNN (מותקנות דרך pip) כדי ש-CTranslate2 ימצא אותן ב-Windows."""
-    if sys.platform != "win32":
+    """מרשום את תיקיות ה-DLL של cuBLAS/cuDNN כדי ש-CTranslate2 ימצא אותן ב-Windows -
+    רק בבילד שכולל אותן בפועל (-IncludeGPU); בבילד ברירת המחדל (CPU) אין מה
+    לרשום, וזה מצב תקין וצפוי - לא מצריך אזהרה בלוג בכל עלייה."""
+    if sys.platform != "win32" or not has_bundled_cuda_runtime():
         return
     try:
-        if getattr(sys, "frozen", False):
-            base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent / "_internal"))
-        else:
-            base = Path(sys.prefix) / "Lib" / "site-packages"
-        candidates = [
-            base / "nvidia" / "cublas" / "bin",
-            base / "nvidia" / "cudnn" / "bin",
-        ]
-        for dll_dir in candidates:
-            if dll_dir.is_dir():
-                os.add_dll_directory(str(dll_dir))
-                os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
-            else:
-                logger.warning("expected CUDA dll directory not found: %s", dll_dir)
+        for dll_dir in cuda_dll_dirs():
+            os.add_dll_directory(str(dll_dir))
+            os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
     except Exception as exc:
         logger.warning("could not register CUDA dll directories: %s", exc)
 

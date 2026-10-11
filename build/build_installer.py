@@ -627,7 +627,19 @@ def perform_install(install_dir, desktop, startmenu, startup, status_cb=lambda m
     progress_cb(100)
 
 
-def run_silent_install(install_dir: str = None) -> int:
+def relaunch_app_unelevated(exe: Path) -> None:
+    """Starts the app again after a silent update. This installer process is
+    elevated (UAC), so launching the exe directly would run the whole app as
+    administrator; going through explorer.exe hands the launch to the user's
+    normal shell token. Failure is non-fatal - the install itself succeeded."""
+    try:
+        subprocess.Popen(["explorer.exe", str(exe)])
+        print("Relaunched Scriptly PC (via explorer, not elevated)")
+    except Exception as e:
+        print(f"Relaunch failed (non-fatal): {e}", file=sys.stderr)
+
+
+def run_silent_install(install_dir: str = None, relaunch: bool = False) -> int:
     """The --silent entry point: runs the whole install with zero dialogs, to
     the existing install location (preserving settings/meeting data - see
     perform_install's docstring), and returns a proper process exit code
@@ -673,6 +685,8 @@ def run_silent_install(install_dir: str = None) -> int:
         return 1
 
     print(f"Scriptly PC {APP_VER} installed silently to {dest}")
+    if relaunch:
+        relaunch_app_unelevated(dest / EXE_NAME)
     return 0
 
 
@@ -823,20 +837,21 @@ def _parse_silent_args(argv):
     omitted: existing registry InstallLocation, then the default Program
     Files path)."""
     silent = "--silent" in argv
+    relaunch = "--relaunch" in argv
     install_dir = None
     for a in argv:
         if a.startswith("--install-dir="):
             install_dir = a.split("=", 1)[1]
-    return silent, install_dir
+    return silent, install_dir, relaunch
 
 def main():
     # --silent: the whole point is zero dialogs, so this branch never touches
     # QApplication/QDialog at all - just runs the install and exits with a
     # real process exit code, so a caller (e.g. app/update_checker.py's
     # self-update flow) can tell success from failure without parsing output.
-    silent, install_dir = _parse_silent_args(sys.argv[1:])
+    silent, install_dir, relaunch = _parse_silent_args(sys.argv[1:])
     if silent:
-        sys.exit(run_silent_install(install_dir))
+        sys.exit(run_silent_install(install_dir, relaunch))
 
     app = QApplication(sys.argv)
     # Force Fusion style: Qt6's native Windows 11 style ignores custom
@@ -928,11 +943,19 @@ def main():
     built_installer = Path("build/installer_dist/Scriptly_PC_Setup.exe")
     if ok and built_installer.exists():
         size = built_installer.stat().st_size / 1024 / 1024
-        # Final deliverable lives at the project root, versioned, matching
-        # the previous Inno-built naming (Scriptly-PC-Setup-<version>.exe).
-        final_path = Path(f"Scriptly-PC-Setup-{APP_VER}.exe")
+        # SCRIPTLY_BUILD_VARIANT is set by build.ps1 ("gpu" or unset/"cpu") so
+        # the CPU and GPU installers get distinct filenames and never delete
+        # each other - only the variant actually being rebuilt is replaced.
+        variant = os.environ.get("SCRIPTLY_BUILD_VARIANT", "cpu").strip().lower()
+        suffix = "-gpu" if variant == "gpu" else ""
+        final_path = Path(f"Scriptly-PC-Setup-{APP_VER}{suffix}.exe")
+        # Only clean up stale installers of the SAME variant (version-wildcard,
+        # suffix-exact) - a CPU build must never delete a GPU-variant file and
+        # vice versa, since both can legitimately coexist.
         for old in Path(".").glob("Scriptly-PC-Setup-*.exe"):
-            old.unlink()
+            is_gpu_file = old.name.endswith("-gpu.exe")
+            if is_gpu_file == bool(suffix):
+                old.unlink()
         shutil.move(str(built_installer), str(final_path))
         script.unlink(missing_ok=True)
         try:

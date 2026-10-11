@@ -1751,7 +1751,7 @@ class Dashboard:
         ).pack(side="left" if anchor == "w" else "right")
         update_status_lbl.pack(fill="x", padx=0, pady=(4, 0))
 
-        auto_update_var = tk.BooleanVar(value=config.get("auto_update_enabled", False))
+        auto_update_var = tk.BooleanVar(value=config.get("auto_update_enabled", True))
         ctk.CTkCheckBox(sec_storage, text=t("settings_auto_update"), variable=auto_update_var).pack(
             anchor=anchor, padx=16, pady=(8, 0)
         )
@@ -1762,6 +1762,8 @@ class Dashboard:
         )
 
         def do_update_now():
+            from . import update_checker
+
             update_now_btn.configure(state="disabled")
             update_now_status_lbl.configure(text=t("update_check_checking"))
 
@@ -1786,7 +1788,7 @@ class Dashboard:
                     self.root.after(0, lambda: update_now_status_lbl.configure(text=t("update_downloading", pct=pct)))
 
                 try:
-                    update_checker.perform_self_update(on_progress=on_progress)
+                    update_checker.stage_update(on_progress=on_progress)
                 except update_checker.NoAssetHostedError as exc:
                     self.root.after(0, lambda: _finish(str(exc)))
                     return
@@ -1806,7 +1808,10 @@ class Dashboard:
                     self._flush_geometry()
                     if self.controller.is_recording:
                         self.controller.stop_recording()
-                    self.root.event_generate("<<ScriptlyQuit>>")
+                    if update_checker.install_pending():
+                        self.root.event_generate("<<ScriptlyQuitNoUpdate>>")
+                    else:
+                        update_now_status_lbl.configure(text=t("update_install_not_started"))
                 else:
                     update_now_status_lbl.configure(text=t("update_ready_restart_later"))
 
