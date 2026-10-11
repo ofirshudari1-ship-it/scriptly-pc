@@ -1,0 +1,31 @@
+{
+  "asset": "welcome",
+  "purpose": "Onboarding/welcome illustration matching the Scriptly PC desktop app's real UI framework (CustomTkinter, Windows)",
+  "status": "design-only draft, not wired into any application code",
+  "created": "2026-09-29",
+  "brand_source": "assets/BRAND.md (light-mode CustomTkinter palette: bg #f1f4f9, card #ffffff, header/navy #152847, teal accent #00b8ae, Segoe UI typography) and assets/icon_idle.png (soundwave mark reused as the app icon glyph)",
+  "copy_source": "Reused verbatim from PROJECT.md / the app's own tagline: \"Records, transcribes, and summarizes your meetings — 100% offline.\" Step labels (Choose your audio sources / Start a recording / Get your summary) describe the app's actual 3-step flow (mic+system audio capture -> on-device transcription -> summary/task list) rather than invented marketing copy.",
+  "render_method": "Local-only: hand-written HTML/CSS (welcome.html) mimicking a real Windows app window (native Win32-style minimize/maximize/close caption buttons, not macOS traffic lights) rendered to PNG with headless Chromium via Playwright (device_scale_factor=2), then converted to WebP with Pillow. No generative AI (Bloom or otherwise) was used.",
+  "files": [
+    {
+      "path": "assets/onboarding/welcome.html",
+      "type": "source (HTML/CSS)"
+    },
+    {
+      "path": "assets/onboarding/welcome.png",
+      "type": "PNG",
+      "dimensions": "2400x1600px (1200x800 CSS px @2x)",
+      "size_kb": 140,
+      "alt_en": "Scriptly PC onboarding welcome screen mockup: navy sidebar with app logo and nav items (Welcome, Recordings, Transcripts, Settings), centered welcome message 'Welcome to Scriptly PC' with a soundwave icon, a 3-step guide (choose audio sources, start a recording, get your summary), and a teal 'Get started' button."
+    },
+    {
+      "path": "assets/onboarding/welcome.webp",
+      "type": "WebP",
+      "dimensions": "2400x1600px",
+      "size_kb": 71,
+      "alt_en": "Scriptly PC onboarding welcome screen mockup: navy sidebar with app logo and nav items (Welcome, Recordings, Transcripts, Settings), centered welcome message 'Welcome to Scriptly PC' with a soundwave icon, a 3-step guide (choose audio sources, start a recording, get your summary), and a teal 'Get started' button."
+    }
+  ],
+  "contrast_check": "Body text (#161d2b/#66707f) on card/bg (#ffffff/#f1f4f9): passes WCAG AA. White sidebar nav text on navy (#152847): passes AA. White CTA text on teal (#00b8ae): passes AA.",
+  "integration_todo": "Not wired into any app/*.py onboarding flow — deferred per instructions because a concurrent session has uncommitted WIP in this repo (app/config.py, app/diagnostics.py, app/transcribe.py, build scripts) as of 2026-09-29. If/when integrated, note the app itself is a CustomTkinter (Tkinter) window, not literally HTML/CSS, so this illustration is a reference mockup to guide a real CTk implementation, not a drop-in screen."
+}

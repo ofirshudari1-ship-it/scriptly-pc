@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --paper:#f4f6fb;
+    --paper-raised:#ffffff;
+    --ink:#10151f;
+    --ink-soft:#57647a;
+    --navy:#152847;
+    --navy-soft:#24406b;
+    --teal:#009991;
+    --teal-bright:#00b8ae;
+    --amber-bright:#e2a52a;
+    --coral-bright:#e34848;
+    --green-bright:#1caa6b;
+    --line:#d7deea;
+    --shadow: 0 1px 2px rgba(16,21,31,.04), 0 8px 24px rgba(16,21,31,.06);
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    width:1600px; height:900px; overflow:hidden;
+    background:
+      radial-gradient(900px 500px at 88% -10%, color-mix(in srgb, var(--teal-bright) 14%, transparent), transparent 60%),
+      var(--paper);
+    font-family:var(--body); color:var(--ink);
+    position:relative;
+  }
+  .wrap{ display:grid; grid-template-columns: 1.05fr 1fr; align-items:center; height:100%; padding:0 88px; gap:40px; }
+
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:14px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:22px;
+  }
+  .eyebrow::before{ content:""; width:8px; height:8px; border-radius:50%; background:var(--teal-bright); }
+
+  h1{
+    font-family:var(--display); font-weight:700; font-size:66px; line-height:1.04;
+    letter-spacing:-.01em; margin:0 0 24px; color:var(--ink);
+  }
+  h1 em{ font-style:normal; color:var(--teal); }
+
+  .lede{ font-size:21px; line-height:1.5; color:var(--ink-soft); max-width:46ch; margin:0 0 34px; }
+
+  .statusline{
+    display:inline-flex; align-items:center; gap:10px; font-family:var(--mono); font-size:15px;
+    color:var(--ink-soft); background:var(--paper-raised); border:1px solid var(--line);
+    border-radius:999px; padding:10px 20px; box-shadow:var(--shadow);
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; background:var(--teal-bright); }
+
+  /* App mock */
+  .appmock{
+    background:var(--navy); border-radius:22px; padding:20px; box-shadow: 0 30px 60px rgba(16,21,31,.28);
+    position:relative;
+  }
+  .appmock .tb{ display:flex; gap:7px; margin-bottom:16px; padding:0 4px; }
+  .appmock .tb-dot{ width:11px; height:11px; border-radius:50%; background:rgba(255,255,255,.22); }
+  .appmock .panel{
+    background:var(--paper-raised); border-radius:16px; padding:22px 22px 18px;
+  }
+  .appmock h4{ font-family:var(--display); font-weight:700; font-size:17px; margin:0 0 14px; color:var(--navy); }
+  .appmock .row{
+    display:grid; grid-template-columns:22px 1fr auto; align-items:center; gap:12px;
+    padding:10px 8px; border-radius:10px; font-size:14px;
+  }
+  .appmock .row.active{ background:color-mix(in srgb, var(--teal-bright) 14%, transparent); }
+  .appmock .row .icon{ width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; }
+  .appmock .row .icon.done{ background:color-mix(in srgb, var(--green-bright) 22%, transparent); color:var(--green-bright); }
+  .appmock .row .icon.now{ background:color-mix(in srgb, var(--teal-bright) 22%, transparent); color:var(--teal); }
+  .appmock .row .icon.todo{ background:var(--line); color:var(--ink-soft); }
+  .appmock .row .label{ color:var(--ink); font-weight:500; }
+  .appmock .row .tag{ font-family:var(--mono); font-size:11px; color:var(--ink-soft); }
+
+  .wave{ display:flex; align-items:flex-end; gap:4px; height:34px; margin:16px 8px 4px; }
+  .wave span{ width:5px; border-radius:3px; background:var(--teal-bright); }
+
+  .badge{
+    position:absolute; top:-16px; right:20px; background:var(--teal-bright); color:#04211f;
+    font-family:var(--mono); font-size:12px; font-weight:600; padding:7px 14px; border-radius:999px;
+    box-shadow: 0 8px 20px rgba(0,184,174,.35);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">100% offline &middot; Windows</div>
+      <h1>Every conversation<br>on your PC, <em>written down.</em></h1>
+      <p class="lede">Scriptly PC records your microphone and system audio, transcribes and summarizes every meeting into a task list &mdash; entirely on-device.</p>
+      <div class="statusline"><span class="dot"></span> Recording &middot; mic + system audio &middot; local only</div>
+    </div>
+    <div class="appmock">
+      <div class="badge">No cloud, ever</div>
+      <div class="tb"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+      <div class="panel">
+        <h4>Weekly sync &mdash; Product</h4>
+        <div class="wave">
+          <span style="height:40%"></span><span style="height:70%"></span><span style="height:100%"></span>
+          <span style="height:55%"></span><span style="height:85%"></span><span style="height:35%"></span>
+          <span style="height:65%"></span><span style="height:95%"></span><span style="height:50%"></span>
+          <span style="height:75%"></span><span style="height:30%"></span><span style="height:60%"></span>
+        </div>
+        <div class="row done"><span class="icon done">&#10003;</span><span class="label">Capture</span><span class="tag">WASAPI loopback</span></div>
+        <div class="row active"><span class="icon now">&#9679;</span><span class="label">Transcribe</span><span class="tag">on-device</span></div>
+        <div class="row"><span class="icon todo">3</span><span class="label">Summary + tasks</span><span class="tag">queued</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

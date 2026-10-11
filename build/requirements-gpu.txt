@@ -1,0 +1,24 @@
+# Optional GPU-acceleration dependencies for faster-whisper/ctranslate2.
+#
+# NOT installed by default, and NOT bundled into the default installer -
+# these three packages alone weigh ~1.8GB (cuDNN 1.1GB + cuBLAS 737MB +
+# cuda_nvrtc 179MB), which used to make Scriptly-PC-Setup-<version>.exe a
+# 2GB+ download for every user regardless of whether they have a compatible
+# NVIDIA GPU. The app already falls back to CPU/int8 automatically if CUDA
+# fails to load (see app/transcribe.py:_get_model) - CPU-only is a fully
+# functional default, just slower per-recording.
+#
+# To build the GPU-accelerated variant instead (tested on an RTX 4060):
+#   powershell -ExecutionPolicy Bypass -File build\build.ps1 -IncludeGPU
+# This installs these packages into the build venv, bundles the DLLs into
+# the app payload, and names the output Scriptly-PC-Setup-<version>-gpu.exe
+# so the two variants never collide or silently overwrite one another.
+#
+# faster-whisper/ctranslate2 don't declare these as pip dependencies
+# themselves (hence a separate file rather than being implied by
+# requirements.txt), so `pip install -r requirements.txt -r requirements-gpu.txt`
+# is required together to actually get GPU acceleration in a dev venv.
+
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cudnn-cu12==9.25.1.1

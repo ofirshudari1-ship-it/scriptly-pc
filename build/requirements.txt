@@ -20,15 +20,9 @@ google-api-python-client==2.200.0
 customtkinter==6.0.0
 python-docx==1.2.0
 
-# GPU acceleration for faster-whisper transcription (tested on an RTX 4060).
-# faster-whisper/ctranslate2 don't declare these as pip dependencies, so a
-# plain `pip install -r requirements.txt` silently gets you CPU-only
-# transcription (the app already falls back to CPU automatically, just much
-# slower) unless these are installed too. Safe to drop this block entirely
-# on a machine with no NVIDIA GPU.
-nvidia-cublas-cu12==12.9.2.10
-nvidia-cuda-nvrtc-cu12==12.9.86
-nvidia-cudnn-cu12==9.25.1.1
+# GPU acceleration deps (CUDA/cuDNN, ~1.8GB) moved to requirements-gpu.txt -
+# they are NOT installed or bundled by default. See that file for why, and
+# build/build.ps1's -IncludeGPU switch for how to opt in at build time.
 
 # Build tooling (only needed to package the .exe, not to run the app) is in
 # requirements-dev.txt.

@@ -1,0 +1,31 @@
+{
+  "asset": "hero",
+  "purpose": "Marketing hero graphic for the Scriptly PC landing page (site/scriptly-landing.html)",
+  "status": "design-only draft, not wired into any page",
+  "created": "2026-09-29",
+  "brand_source": "assets/BRAND.md (palette) + site/scriptly-landing.html (fonts, existing hero headline/eyebrow copy, app-mock pattern)",
+  "copy_source": "Reused verbatim from the existing landing-page hero (site/scriptly-landing.html lines ~288-313): headline \"Every conversation on your PC, written down.\", eyebrow \"100% offline · Windows\", statusline text. No new marketing copy was invented for this asset.",
+  "render_method": "Local-only: hand-written HTML/CSS (hero.html) rendered to PNG with headless Chromium via Playwright (device_scale_factor=2), then converted to WebP with Pillow. No generative AI (Bloom or otherwise) was used.",
+  "files": [
+    {
+      "path": "assets/marketing/hero.html",
+      "type": "source (HTML/CSS)"
+    },
+    {
+      "path": "assets/marketing/hero.png",
+      "type": "PNG",
+      "dimensions": "3200x1800px (1600x900 CSS px @2x)",
+      "size_kb": 299,
+      "alt_en": "Scriptly PC landing page hero graphic: headline 'Every conversation on your PC, written down.' beside a dark navy app window mockup showing a waveform and a three-step Capture / Transcribe / Summary+tasks pipeline, with a 'No cloud, ever' badge."
+    },
+    {
+      "path": "assets/marketing/hero.webp",
+      "type": "WebP",
+      "dimensions": "3200x1800px",
+      "size_kb": 90,
+      "alt_en": "Scriptly PC landing page hero graphic: headline 'Every conversation on your PC, written down.' beside a dark navy app window mockup showing a waveform and a three-step Capture / Transcribe / Summary+tasks pipeline, with a 'No cloud, ever' badge."
+    }
+  ],
+  "contrast_check": "Headline (ink #10151f) on paper (#f4f6fb): passes WCAG AA. Teal emphasis text (#009991) on paper: passes AA for large text. White CTA/badge text on teal (#00b8ae): passes AA.",
+  "integration_todo": "Not linked from site/scriptly-landing.html yet — deferred per instructions because a concurrent session has uncommitted WIP in this repo (app/config.py, app/diagnostics.py, app/transcribe.py, build scripts) as of 2026-09-29."
+}
