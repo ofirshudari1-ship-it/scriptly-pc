@@ -8,12 +8,18 @@ Scriptly PC is a Windows desktop app that records calls and meetings (your micro
 
 ## Download & install
 
-**Installer hosting is currently pending.** At roughly 2GB, the installer is over GitHub's 2GB-per-file limit for release assets, so it is not yet attached to a GitHub Release. Check the [GitHub repo](https://github.com/ofirshudari1-ship-it/scriptly-pc) and its [Releases page](https://github.com/ofirshudari1-ship-it/scriptly-pc/releases/latest) for the latest status — a proper download host is being worked on. The app's automatic update *check* already works via GitHub regardless; only the installer binary itself needs a permanent home.
+**[Download the latest Windows installer (Scriptly-PC-Setup-0.18.1.exe, ~210MB)](https://github.com/ofirshudari1-ship-it/scriptly-pc/releases/latest)**
+from the Releases page. The default installer is **CPU-only** (it was ~2GB before
+v0.18.0 - see [CHANGELOG.md](CHANGELOG.md) - because the old build bundled ~1.8GB
+of CUDA/cuDNN libraries for every user, whether or not they had a compatible
+NVIDIA GPU). The installer asks for administrator approval once (it installs
+to Program Files).
 
-Once available:
+A GPU-accelerated variant (faster transcription, ~2GB, requires an NVIDIA
+GPU) can be built with `build\build.ps1 -IncludeGPU` — see `build/requirements-gpu.txt`.
 
 1. Download the Scriptly PC installer.
-2. Run it — no administrator rights required by default.
+2. Run it and approve the Windows administrator prompt (it installs to Program Files).
 3. Follow the setup wizard: license, install location, language (English/Hebrew).
 4. On first run, Scriptly PC downloads the Whisper and Ollama models (~7GB) once, over your own connection.
 5. After that first-time download, Scriptly PC never needs the internet again.
@@ -40,7 +46,7 @@ Once available:
 
 ## Automatic updates
 
-Scriptly PC checks GitHub Releases for a newer version and shows a system-tray notification with a link when one is available — no account, no telemetry involved in the check itself. See the [Releases page](https://github.com/ofirshudari1-ship-it/scriptly-pc/releases) for version history.
+Scriptly PC checks GitHub Releases shortly after launch and then every ~6 hours. By default it downloads a newer version, verifies it (size, executable header, sha256) and installs it when you are not recording or when you close the app; Windows asks for administrator approval once per update. This can be turned off in Settings ("Install updates automatically"). No account and no telemetry are involved. See the [Releases page](https://github.com/ofirshudari1-ship-it/scriptly-pc/releases) for version history.
 
 ## Privacy
 
