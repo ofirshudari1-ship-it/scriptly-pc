@@ -31,6 +31,7 @@ class Meeting:
     duration_seconds: float = 0.0
     ai_title: str = ""
     tone: str = ""
+    meeting_type: str = ""
     segments: List[dict] = field(default_factory=list)
 
     @property
@@ -116,6 +117,7 @@ def list_meetings(meetings_dir: Path) -> List[Meeting]:
                 duration_seconds=meta.get("duration_seconds", 0.0),
                 ai_title=meta.get("ai_title", ""),
                 tone=meta.get("tone", ""),
+                meeting_type=meta.get("meeting_type", ""),
                 segments=segments,
             )
         )

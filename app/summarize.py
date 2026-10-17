@@ -71,6 +71,10 @@ def _no_content_message() -> str:
     )
 
 
+def no_content_message() -> str:
+    return _no_content_message()
+
+
 def _error_message() -> str:
     return (
         f"## {t('summary_error_title')}\n"

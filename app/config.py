@@ -67,6 +67,9 @@ DEFAULTS = {
     "speaker_labels": True,
     "ai_titles": True,
     "ai_tags": True,
+    "ai_provider": "local",  # "local" (Ollama, offline) | "claude" (opt-in cloud analysis, app/claude_ai.py)
+    "anthropic_api_key": "",  # user-supplied; ANTHROPIC_API_KEY env var is also honored
+    "claude_model": "claude-sonnet-5",
     "ui_scale": 1.0,
     "floating_launcher": True,
     "google_client_id": "",

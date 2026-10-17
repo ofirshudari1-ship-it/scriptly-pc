@@ -4,7 +4,9 @@
 
 ## What it does
 
-Scriptly PC is a Windows desktop app that records calls and meetings (your microphone and your computer's system audio at the same time), automatically transcribes them using a local Whisper engine tuned for Hebrew (`ivrit-ai/whisper-large-v3-turbo-ct2`), and produces a summary and action items using a local AI model through Ollama. It runs **completely offline** — no audio file, transcript, or summary ever leaves your computer, unless you explicitly connect a Google account to send a single task (opt-in, off by default). It's built for a single user who wants to document work meetings and calls without depending on a cloud service, an account, or a monthly subscription, with full Hebrew and English support (UI and RTL).
+**Claude AI (optional):** one pass returns the summary, meeting type (sales / support / team sync / planning / client / 1:1 / interview / brainstorm / negotiation / training), conclusions & decisions, tasks with owner and due date, results, practical tips, open questions and tags. Falls back to the local Ollama model automatically if the key is missing or the request fails.
+
+Scriptly PC is a Windows desktop app that records calls and meetings (your microphone and your computer's system audio at the same time), automatically transcribes them using a local Whisper engine tuned for Hebrew (`ivrit-ai/whisper-large-v3-turbo-ct2`), and produces a summary and action items using a local AI model through Ollama. It runs **completely offline** — no audio file, transcript, or summary ever leaves your computer, unless you explicitly opt in to one of two optional features, both off by default: connecting a Google account to send a single task, or enabling **Claude AI** analysis (Settings → Transcription & Summary), which sends only the *text* transcript to Anthropic's API after an explicit consent prompt — audio and transcription always stay local. It's built for a single user who wants to document work meetings and calls without depending on a cloud service, an account, or a monthly subscription, with full Hebrew and English support (UI and RTL).
 
 ## Download & install
 

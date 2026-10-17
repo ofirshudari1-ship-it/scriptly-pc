@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from . import audio_devices, audio_player, autostart, diagnostics, google_integration, hotkey_conflicts, i18n
+from . import audio_devices, audio_player, autostart, claude_ai, diagnostics, google_integration, hotkey_conflicts, i18n
 from .config import BUILD_DATE, PROJECT_ROOT, RESOURCE_ROOT, VERSION, save_config
 from .export import DIGEST_EXPORT_EXTENSIONS, EXPORT_EXTENSIONS, export_digest, export_meeting, export_meeting_srt
 from .i18n import t
@@ -1599,6 +1599,42 @@ class Dashboard:
         vocab_var = tk.StringVar(value=config.get("custom_vocabulary", ""))
         add_row(sec_ai, t("settings_custom_vocab"), ctk.CTkEntry(sec_ai, textvariable=vocab_var), t("help_custom_vocab"))
 
+        # --- Claude AI (optional cloud analysis) ---
+        provider_labels = {"local": t("claude_provider_local"), "claude": t("claude_provider_claude")}
+        provider_reverse = {v: k for k, v in provider_labels.items()}
+        provider_var = tk.StringVar(value=provider_labels.get(config.get("ai_provider", "local"), provider_labels["local"]))
+        add_row(
+            sec_ai, t("claude_provider_label"),
+            ctk.CTkOptionMenu(sec_ai, values=list(provider_labels.values()), variable=provider_var), t("help_claude_provider"),
+        )
+        claude_key_var = tk.StringVar(value=config.get("anthropic_api_key", ""))
+        add_row(sec_ai, t("claude_key_label"), ctk.CTkEntry(sec_ai, textvariable=claude_key_var, show="•"), t("help_claude_key"))
+        claude_model_var = tk.StringVar(value=config.get("claude_model") or claude_ai.DEFAULT_MODEL)
+        add_row(
+            sec_ai, t("claude_model_label"),
+            ctk.CTkOptionMenu(sec_ai, values=claude_ai.MODELS, variable=claude_model_var), None,
+        )
+        claude_status_lbl = ctk.CTkLabel(
+            sec_ai, text="", text_color=C["text_soft"], font=ctk.CTkFont(family=FONT, size=11), anchor=anchor,
+        )
+
+        def test_claude():
+            claude_status_lbl.configure(text=t("claude_status_testing"), text_color=C["amber"])
+            probe = dict(config, anthropic_api_key=claude_key_var.get().strip(), claude_model=claude_model_var.get())
+
+            def worker():
+                ok, msg = claude_ai.test_connection(probe)
+                self.root.after(0, lambda: claude_status_lbl.configure(
+                    text=msg, text_color=C["green"] if ok else C["red_text"]))
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        ctk.CTkButton(
+            sec_ai, text=t("claude_test_btn"), height=28, fg_color="transparent", border_width=1,
+            border_color=C["border"], text_color=C["text_soft"], hover_color=C["card_hover"], command=test_claude,
+        ).pack(anchor=anchor, padx=16, pady=(4, 0))
+        claude_status_lbl.pack(fill="x", padx=16, pady=(2, 4))
+
         speaker_labels_var = tk.BooleanVar(value=config.get("speaker_labels", True))
         ctk.CTkCheckBox(sec_ai, text=t("settings_speaker_labels"), variable=speaker_labels_var).pack(
             anchor=anchor, padx=16, pady=(4, 0)
@@ -1925,6 +1961,13 @@ class Dashboard:
             config["ollama_model"] = ollama_model_var.get().strip() or config["ollama_model"]
             config["whisper_device"] = whisper_device_var.get().strip() or config["whisper_device"]
             config["custom_vocabulary"] = vocab_var.get().strip()
+            new_provider = provider_reverse.get(provider_var.get(), "local")
+            if new_provider == "claude" and config.get("ai_provider") != "claude":
+                if not messagebox.askyesno(t("app_title"), t("claude_consent_body")):
+                    new_provider = "local"
+            config["ai_provider"] = new_provider
+            config["anthropic_api_key"] = claude_key_var.get().strip()
+            config["claude_model"] = claude_model_var.get() or claude_ai.DEFAULT_MODEL
             config["speaker_labels"] = bool(speaker_labels_var.get())
             config["ai_titles"] = bool(ai_titles_var.get())
             config["ai_tags"] = bool(ai_tags_var.get())

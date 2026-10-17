@@ -554,3 +554,39 @@ class TestNewConfigDefaults(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestClaudeAI(unittest.TestCase):
+    """Pure-logic checks for the optional Claude analysis path - no network, no window."""
+
+    def test_disabled_by_default_and_without_key(self):
+        from app import claude_ai
+        from app.config import DEFAULTS
+
+        self.assertEqual(DEFAULTS["ai_provider"], "local")
+        self.assertIsNone(claude_ai.analyze("some long enough transcript " * 10, dict(DEFAULTS)))
+        self.assertFalse(claude_ai.is_enabled({"ai_provider": "claude", "anthropic_api_key": ""}))
+
+    def test_markdown_keeps_tasks_parseable(self):
+        from app import claude_ai
+        from app.tasks import _extract_task_lines
+
+        i18n.set_language("en")
+        md = claude_ai.to_markdown({
+            "tldr": "We agreed on renewal.", "meeting_type": "sales_call",
+            "decisions": ["Renew for 12 months"], "results": ["Discount 10%"], "tips": ["Send the quote today"],
+            "tasks": [{"task": "Send quote", "owner": "Dana", "due": "Thu"}, {"task": "Book follow-up"}],
+        })
+        self.assertIn("Sales call", md)
+        self.assertIn("Tips & Recommendations", md)
+        lines = _extract_task_lines(md)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("Send quote"))
+
+    def test_every_meeting_type_has_a_label_in_both_languages(self):
+        from app import claude_ai
+
+        for lang in ("en", "he"):
+            data = json.loads((ROOT / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+            for mt in claude_ai.MEETING_TYPES:
+                self.assertIn(f"meeting_type_{mt}", data)

@@ -15,7 +15,10 @@ from .i18n import t
 from .logger import get_logger
 from .meetings import list_meetings
 from .meta import load_meta, update_meta
-from .summarize import MIN_WORDS_FOR_SUMMARY, generate_tags, generate_title, generate_tone, summarize
+from . import claude_ai
+from .summarize import (
+    MIN_WORDS_FOR_SUMMARY, generate_tags, generate_title, generate_tone, no_content_message, summarize,
+)
 from .tasks import get_all_tasks, set_task_done
 from .transcribe import transcribe_segments
 from .voice_commands import VoiceCommandListener
@@ -251,16 +254,31 @@ class AppController:
                 json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
-            summary = summarize(transcript, self.config["ollama_model"], self.config["ollama_url"])
+            enough_words = len(transcript.split()) >= MIN_WORDS_FOR_SUMMARY
+            # Optional cloud analysis (Claude) - None whenever it's off, unconfigured, or fails,
+            # in which case everything below runs on the local Ollama path exactly as before.
+            analysis = claude_ai.analyze(transcript, self.config) if enough_words else None
+            if analysis is not None and analysis.get("no_real_content"):
+                summary = no_content_message()
+            elif analysis is not None:
+                summary = claude_ai.to_markdown(analysis)
+            else:
+                summary = summarize(transcript, self.config["ollama_model"], self.config["ollama_url"])
             (meeting_dir / "summary.md").write_text(summary, encoding="utf-8")
+            a = analysis if (analysis and not analysis.get("no_real_content")) else {}
 
-            if self.config.get("ai_titles", True) and len(transcript.split()) >= MIN_WORDS_FOR_SUMMARY:
-                ai_title = generate_title(summary, self.config["ollama_model"], self.config["ollama_url"])
+            if a.get("meeting_type"):
+                update_meta(meeting_dir, meeting_type=a["meeting_type"])
+
+            if self.config.get("ai_titles", True) and enough_words:
+                ai_title = (a.get("title") or "").strip() or generate_title(
+                    summary, self.config["ollama_model"], self.config["ollama_url"]
+                )
                 if ai_title:
                     update_meta(meeting_dir, ai_title=ai_title)
 
-            if len(transcript.split()) >= MIN_WORDS_FOR_SUMMARY:
-                tone = generate_tone(summary, self.config["ollama_model"], self.config["ollama_url"])
+            if enough_words:
+                tone = a.get("tone") or generate_tone(summary, self.config["ollama_model"], self.config["ollama_url"])
                 if tone:
                     update_meta(meeting_dir, tone=tone)
 
@@ -268,10 +286,12 @@ class AppController:
             # always runs right after recording, before the user has had a chance to open
             # the tags/notes dialog, so there is nothing to clobber in practice, but the
             # check is kept explicit so it stays safe if that ordering ever changes.
-            if self.config.get("ai_tags", True) and len(transcript.split()) >= MIN_WORDS_FOR_SUMMARY:
+            if self.config.get("ai_tags", True) and enough_words:
                 existing_tags = load_meta(meeting_dir).get("tags", [])
                 if not existing_tags:
-                    ai_tags = generate_tags(summary, self.config["ollama_model"], self.config["ollama_url"])
+                    ai_tags = [x.strip() for x in a.get("tags", []) if isinstance(x, str) and x.strip()][:4] or generate_tags(
+                        summary, self.config["ollama_model"], self.config["ollama_url"]
+                    )
                     if ai_tags:
                         update_meta(meeting_dir, tags=ai_tags)
 
